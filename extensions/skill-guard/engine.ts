@@ -1,7 +1,7 @@
 /**
  * The whole decision logic. Pure: no filesystem, no UI, no Pi. index.ts wires it up.
  */
-import type { Contract, Grant } from "./contracts.ts";
+import { SUB_SKILLS, type Contract, type Grant } from "./contracts.ts";
 
 export interface GuardState {
 	/** Skill currently open, or null before the flow starts. */
@@ -82,6 +82,9 @@ export function decide(state: GuardState, req: Request, contracts: readonly Cont
 
 	if (req.kind === "skill") {
 		if (req.name === state.phase) return { allow: true, phase: state.phase };
+		// A sub-skill runs inside the open phase: it neither moves the flow nor narrows
+		// what the phase grants. With no phase open it is the way in.
+		if (SUB_SKILLS.has(req.name)) return { allow: true, phase: c ? state.phase : req.name };
 		// A skill without a contract is not a phase: it may be read from anywhere, but
 		// it does not lift the restrictions of the phase that is open. Only the user, by
 		// naming a phase, can move the flow.

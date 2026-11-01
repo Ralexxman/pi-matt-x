@@ -14,7 +14,8 @@ export type Grant = "read" | "write" | "edit" | "bash";
 
 /**
  * Skills the flow runs *inside* another phase rather than moving to it. Entering one
- * is not a phase boundary, so the phase's gate question stays where it is.
+ * is not a phase boundary: the open phase, its grants and its gate question stay as
+ * they are.
  */
 export const SUB_SKILLS: ReadonlySet<string> = new Set(["grilling", "domain-modeling"]);
 
@@ -63,7 +64,7 @@ export const CONTRACTS: readonly Contract[] = [
 		grants: ["read", "write", "edit"],
 		// `grilling` is not a next phase but the interview this one runs: the skill
 		// says to call it. Listed first so it reads as the step it is.
-		successors: ["grilling", "to-spec", "to-tickets", "implement", "domain-modeling", "prototype"],
+		successors: ["grilling", "to-spec", "domain-modeling", "prototype"],
 		gate: {
 			quote: 'Skill tool twice, for "grilling" and "domain-modeling"',
 			question: "GLOSSARY.md и ADR записаны, решения приняты? Пора в спеку?",

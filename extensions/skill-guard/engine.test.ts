@@ -26,6 +26,27 @@ test("the block message names the phase and its next steps", () => {
 	assert.match(d.reason, /grill-with-docs/);
 });
 
+test("a sub-skill keeps the open phase and its grants", () => {
+	const d = decide(at("grill-with-docs"), skill("grilling"), CONTRACTS);
+	assert.equal(d.allow, true);
+	if (!d.allow) return;
+	assert.equal(d.phase, "grill-with-docs");
+	// the whole point: the docs the skill asks for can still be written afterwards
+	assert.equal(decide(at(d.phase), tool("write"), CONTRACTS).allow, true);
+});
+
+test("a sub-skill with no phase open is the way in", () => {
+	const d = decide(at(null), skill("grilling"), CONTRACTS);
+	assert.equal(d.allow, true);
+	if (!d.allow) return;
+	assert.equal(d.phase, "grilling");
+});
+
+test("grill-with-docs cannot skip the spec", () => {
+	assert.equal(decide(at("grill-with-docs"), skill("implement"), CONTRACTS).allow, false);
+	assert.equal(decide(at("grill-with-docs"), skill("to-spec"), CONTRACTS).allow, true);
+});
+
 test("a phase cannot be skipped", () => {
 	const d = decide(at("grilling"), skill("to-spec"), CONTRACTS);
 	assert.equal(d.allow, false);
