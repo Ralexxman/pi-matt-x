@@ -66,6 +66,18 @@ test("a non-successor skill is blocked and the gate question is never asked", as
 	assert.equal(h.asked(), 0, "a blocked move must not ask anything");
 });
 
+test("the answer of a closed phase does not come back when a cycle re-enters it", async () => {
+	// grill-with-docs ↔ prototype is a cycle of contracted phases, so this re-entry
+	// needs no reset and asks no second gate (prototype has none).
+	const h = harness("да, идём");
+	await h.fire("tool_call", readSkill("grill-with-docs"));
+	await h.fire("tool_call", readSkill("prototype")); // answers the gate of grill-with-docs
+	assert.match(h.status(), /закрыли grill-with-docs: да, идём/);
+	await h.fire("tool_call", readSkill("grill-with-docs"));
+	assert.match(h.status(), /phase: grill-with-docs/);
+	assert.doesNotMatch(h.status(), /да, идём/, "its own closed answer must not be shown as current");
+});
+
 test("the answer that closed a phase is recorded and does not survive a new session", async () => {
 	const h = harness("да, идём");
 	await h.fire("tool_call", readSkill("grilling"));

@@ -26,9 +26,9 @@ export default function (pi: ExtensionAPI): void {
 	const showPhase = (ui: { setStatus: (key: string, text: string | undefined) => void }) => {
 		const c = contractOf(CONTRACTS, state.phase);
 		// The answer belongs to the phase it closed, so it is shown as that, never as this
-		// phase's own condition. Returning into a closed phase is impossible without a
-		// reset, so an older answer cannot survive into it.
-		const why = lastClosure ? ` · закрыли ${lastClosure.phase}: ${lastClosure.answer}` : "";
+		// phase's own. A cycle (`grill-with-docs` ↔ `prototype`) can re-enter a closed phase
+		// without a reset, so the phase is compared, not assumed.
+		const why = lastClosure && lastClosure.phase !== c?.name ? ` · закрыли ${lastClosure.phase}: ${lastClosure.answer}` : "";
 		ui.setStatus(
 			"skill-guard",
 			c ? `phase: ${c.name} → ${c.successors.join(" | ") || "—"}${why}` : undefined,
