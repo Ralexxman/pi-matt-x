@@ -96,8 +96,8 @@ export function decide(state: GuardState, req: Request, contracts: readonly Cont
 	if (req.kind === "skill") {
 		if (req.name === state.phase) return { allow: true, phase: state.phase };
 		// A sub-skill runs inside the open phase: it neither moves the flow nor narrows
-		// what the phase grants. With no phase open it is the way in.
-		if (SUB_SKILLS.has(req.name)) return { allow: true, phase: c ? state.phase : req.name };
+		// what the phase grants. With no phase open, only a contracted one is the way in.
+		if (SUB_SKILLS.has(req.name)) return { allow: true, phase: state.phase ?? contractOf(contracts, req.name)?.name ?? null };
 		// A skill without a contract is not a phase: it may be read from anywhere, but
 		// it does not lift the restrictions of the phase that is open. Only the user, by
 		// naming a phase, can move the flow.

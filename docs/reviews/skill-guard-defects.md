@@ -20,7 +20,8 @@
 | D10 | `index.ts:9` | Комментарий: «any unknown skill works as before» — опровергается кодом и тестом `reading an uncontracted skill does not lift the phase` | средняя | исправлено |
 | D6 | `contracts.ts:44,69` | Цитата гейта — не условие конца фазы | средняя | спорное |
 | D7 | `index.ts` весь | Из фазы нельзя выйти: сессия остаётся ограниченной до перезапуска | средняя | спорное |
-| D8 | `index.ts:60` | Ответ пользователя на гейт нигде не хранится | низкая | спорное |
+| D8 | `index.ts:79` | Ответ пользователя на гейт нигде не хранится | низкая | исправлено |
+| D11 | `contracts.ts:4` | Шапка: «A skill with no contract is unguarded: every tool is allowed» — опровергается кодом | средняя | исправлено |
 
 ---
 
@@ -104,7 +105,7 @@ not lift the open phase"`.
 
 ## D9. Комментарий обещал больше, чем код
 
-`engine.ts:34`: «Unknown tools map to null and are always allowed». В открытой фазе
+`engine.ts:27`: «Unknown tools map to null and are always allowed». В открытой фазе
 неизвестный инструмент идёт в `needsPermission` — диалог, а без UI блок. Комментарий
 исправлен: `null` значит «без фазы разрешено, в фазе решает пользователь».
 
@@ -113,6 +114,13 @@ not lift the open phase"`.
 `index.ts:9`: «Not guarded: model-invoked skills that have no contract (any unknown skill
 works as before)». Код и тест `reading an uncontracted skill does not lift the phase`
 говорят обратное: скилл без контракта читается, но ограничения открытой фазы не снимает.
+
+## D11. Шапка контрактов повторяла ту же неправду
+
+`contracts.ts:4`: «A skill with no contract is unguarded: every tool is allowed and it can be
+entered from anywhere». Это спецификация контрактов — самое заметное место, и она
+описывала поведение, которого нет: `decide` для скилла без контракта возвращает
+`phase: state.phase`, то есть ограничения открытой фазы остаются.
 
 ---
 
@@ -132,8 +140,9 @@ works as before)». Код и тест `reading an uncontracted skill does not l
 
 Тоже инструкция, а не критерий готовности.
 
-Остальные шесть цитат — настоящие условия конца (`Check with the user that these seams
-match…`, `Each slice is sized to fit in a single fresh context window`).
+Остальные три цитаты — настоящие условия конца (`Check with the user that these seams
+match…`, `Each slice is sized to fit in a single fresh context window`, и цитата
+`grill-me` из `ask-matt`).
 
 Последствие: в двух фазах пользователь видит доказательство, которое не отвечает на
 заданный вопрос, и отвечает «да» на глазок. Гейт держится на цитате; если цитата не та,
@@ -154,14 +163,15 @@ match…`, `Each slice is sized to fit in a single fresh context window`).
 выход из флоу как фаза; (б) невидимая фаза «вне флоу», куда ведёт любой скилл без
 контракта, если пользователь так сказал; (в) явная команда снятия охраны.
 
-### D8. Ответ на гейт выбрасывается
+### D8. Ответ на гейт терялся
 
-`index.ts:60`: ответ редактора уходит в `gatesPassed.push`, текст теряется.
+`index.ts:79`: ответ редактора уходил в `gatesPassed.push`, текст терялся.
 
 В `GLOSSARY.md` «Обход» определён как «осознанный отказ от гейта с записанной причиной».
-Сейчас записывается только факт, не причина.
+Записывался только факт, не причина.
 
-Правка на две строки (хранить ответ и показывать в статусе), но пока неясно, нужен ли он.
+Исправлено: ответ хранится по имени фазы и показывается в статусной строке
+(`phase: grilling → … · <ответ>`), очищается при смене фазы и новой сессии.
 
 ---
 
@@ -176,5 +186,7 @@ match…`, `Each slice is sized to fit in a single fresh context window`).
 | D5 | `Grant` стал `read \| write \| bash`; `edit`, `write`, `ctx_edit`, `ast_grep_replace` требуют `write`. |
 | D9 | Комментарий `grantFor` описывает реальное поведение. |
 | D10 | Заголовок адаптера описывает реальное поведение. |
+| D11 | Шапка `contracts.ts` больше не обещает, что скилл без контракта снимает охрану. |
+| D8 | Ответ на гейт хранится по фазе и виден в статусной строке. |
 
-Проверка: `npx tsc --noEmit` чисто (вместе с тестами), `npm test` 33/33.
+Проверка: `npx tsc --noEmit` чисто (вместе с тестами), `npm test` 34/34.

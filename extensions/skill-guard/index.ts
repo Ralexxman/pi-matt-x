@@ -20,16 +20,23 @@ export default function (pi: ExtensionAPI): void {
 	const state: GuardState = { phase: null, gatesPassed: [] };
 	/** `${phase}:${tool}` the user already allowed, so one answer does not cost a dialog per call. */
 	const allowed = new Set<string>();
+	/** The answer that closed each phase: an Обход needs its reason, not just the fact. */
+	const reasons = new Map<string, string>();
 
 	const showPhase = (ui: { setStatus: (key: string, text: string | undefined) => void }) => {
 		const c = contractOf(CONTRACTS, state.phase);
-		ui.setStatus("skill-guard", c ? `phase: ${c.name} → ${c.successors.join(" | ") || "—"}` : undefined);
+		const why = c && reasons.get(c.name);
+		ui.setStatus(
+			"skill-guard",
+			c ? `phase: ${c.name} → ${c.successors.join(" | ") || "—"}${why ? ` · ${why}` : ""}` : undefined,
+		);
 	};
 
 	const reset = () => {
 		state.phase = null;
 		state.gatesPassed = [];
 		allowed.clear();
+		reasons.clear();
 	};
 
 	pi.on("session_start", (_event, ctx) => {
@@ -49,6 +56,7 @@ export default function (pi: ExtensionAPI): void {
 		state.phase = name;
 		state.gatesPassed = [];
 		allowed.clear();
+		reasons.clear();
 		showPhase(ctx.ui);
 	});
 
@@ -80,6 +88,7 @@ export default function (pi: ExtensionAPI): void {
 						};
 					}
 					state.gatesPassed.push(state.phase);
+					reasons.set(state.phase, answer.trim());
 					ctx.ui.notify(`skill-guard: ответ записан → ${name}`, "info");
 				}
 			}

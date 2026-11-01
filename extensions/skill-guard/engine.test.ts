@@ -35,6 +35,14 @@ test("a sub-skill keeps the open phase and its grants", () => {
 	assert.equal(decide(at(d.phase), tool("write"), CONTRACTS).allow, true);
 });
 
+test("an uncontracted sub-skill is never a phase", () => {
+	// domain-modeling has no contract, so it cannot arm a phase even on its own
+	const d = decide(at(null), skill("domain-modeling"), CONTRACTS);
+	assert.equal(d.allow, true);
+	if (!d.allow) return;
+	assert.equal(d.phase, null);
+});
+
 test("a sub-skill with no phase open is the way in", () => {
 	const d = decide(at(null), skill("grilling"), CONTRACTS);
 	assert.equal(d.allow, true);

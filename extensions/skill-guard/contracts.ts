@@ -1,9 +1,9 @@
 /**
  * What each phase of the Matt Pocock skill flow is allowed to do.
  *
- * One contract per skill that needs one. A skill with no contract is unguarded:
- * every tool is allowed and it can be entered from anywhere, so unknown or
- * unrelated skills keep working.
+ * One contract per skill that needs one. A skill with no contract is readable from
+ * any phase and adds no rule of its own, but it does not lift the open phase either
+ * — only a contract, or the user naming one, moves the flow.
  *
  * `quote` fields are copied verbatim from the skill's own SKILL.md and are checked
  * against the installed skills by contracts.test.ts. Edit a quote only together
