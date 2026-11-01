@@ -16,7 +16,5 @@
 			]
 		}
 	},
-	"include": ["extensions/**/*.ts"],
-	// Tests import node:test / node:fs; they are typechecked by running them instead.
-	"exclude": ["extensions/**/*.test.ts"]
+	"include": ["extensions/**/*.ts"]
 }

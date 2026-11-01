@@ -42,8 +42,10 @@ export default function (pi: ExtensionAPI): void {
 	// call — they typed it — so this is not checked against successors.
 	pi.on("input", (event, ctx) => {
 		const m = /^\/skill:([\w-]+)/.exec(event.text.trim());
-		if (!m?.[1]) return;
-		state.phase = m[1];
+		const name = m?.[1];
+		// A typo must not look armed: only a skill the guard knows becomes a phase.
+		if (!name || (!contractOf(CONTRACTS, name) && !SUB_SKILLS.has(name))) return;
+		state.phase = name;
 		state.gatesPassed = [];
 		allowed.clear();
 		showPhase(ctx.ui);

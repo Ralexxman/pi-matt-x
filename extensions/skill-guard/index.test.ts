@@ -114,6 +114,14 @@ test("reading an uncontracted skill does not lift the phase", async () => {
 	assert.equal(result.block, true, "but grilling's restriction stays");
 });
 
+test("/skill: with a name the guard does not know arms nothing", async () => {
+	const h = harness("ok");
+	await h.fire("input", { text: "/skill:implemet", source: "interactive" });
+	assert.equal(await h.fire("tool_call", write), undefined, "a typo must not look armed");
+	await h.fire("input", { text: "/skill:grilling", source: "interactive" });
+	assert.equal(((await h.fire("tool_call", write)) as { block?: boolean }).block, true, "a known phase still arms");
+});
+
 test("/skill:name sets the phase without a read", async () => {
 	const h = harness("ok");
 	await h.fire("input", { text: "/skill:implement do the thing", source: "interactive" });

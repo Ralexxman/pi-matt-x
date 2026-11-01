@@ -19,7 +19,14 @@ export type Decision =
 	| { allow: false; reason: string; };
 
 /** Tools that only read. Everything else that writes or executes is mapped explicitly. */
-const READ_ONLY_TOOLS = new Set(["read", "grep", "find", "ls", "ctx_read", "ctx_grep", "ctx_find", "ctx_ls"]);
+const READ_ONLY_TOOLS = new Set([
+	"read", "grep", "find", "ls",
+	// the same four as they arrive from the extensions installed alongside this one
+	"ctx_read", "ctx_grep", "ctx_find", "ctx_ls", "ctx_tree", "ctx_overview",
+	"ctx_search", "ctx_semantic_search", "ctx_graph", "lens_diagnostics",
+	"symbol_search", "read_symbol", "read_enclosing", "module_report", "project_report",
+	"wiki_search", "wiki_recall", "wiki_status",
+]);
 
 /** bash, powershell and every wrapper that ultimately runs a command or an agent with tools. */
 const EXEC_TOOLS = new Set(["bash", "powershell", "pwsh", "shell", "ctx_shell", "codemode", "subagent", "workflow"]);
@@ -52,7 +59,7 @@ export function skillNameFromPath(path: string): string | null {
 export function nextPhases(contracts: readonly Contract[], state: GuardState): string[] {
 	const c = contractOf(contracts, state.phase);
 	if (!c) return [];
-	return c.successors.filter((s) => contractOf(contracts, s) !== undefined || s);
+	return c.successors;
 }
 
 function blocked(reason: string): Decision {
