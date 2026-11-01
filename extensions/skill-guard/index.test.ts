@@ -12,8 +12,11 @@ function harness(answer: string | undefined, permission = true) {
 	const handlers: Record<string, ((event: unknown, ctx: unknown) => unknown)[]> = {};
 	let asked = 0;
 	let confirmed = 0;
+	const statuses: string[] = [];
 	const ui = {
-		setStatus() {},
+		setStatus(_key: string, text: string | undefined) {
+			statuses.push(text ?? "");
+		},
 		notify() {},
 		editor: async () => {
 			asked++;
@@ -34,7 +37,7 @@ function harness(answer: string | undefined, permission = true) {
 		}
 		return undefined;
 	};
-	return { fire, asked: () => asked, confirmed: () => confirmed };
+	return { fire, asked: () => asked, confirmed: () => confirmed, status: () => statuses.at(-1) ?? "" };
 }
 
 const readSkill = (name: string) => ({ toolName: "read", input: { path: `C:/Users/ralex/.agents/skills/${name}/SKILL.md` } });
@@ -61,6 +64,15 @@ test("a non-successor skill is blocked and the gate question is never asked", as
 	const result = (await h.fire("tool_call", readSkill("to-spec"))) as { block?: boolean };
 	assert.equal(result.block, true);
 	assert.equal(h.asked(), 0, "a blocked move must not ask anything");
+});
+
+test("the answer that closed a phase is recorded and does not survive a new session", async () => {
+	const h = harness("да, идём");
+	await h.fire("tool_call", readSkill("grilling"));
+	await h.fire("tool_call", readSkill("grill-with-docs")); // the gate of grilling is answered here
+	assert.match(h.status(), /закрыли grilling: да, идём/, "the answer is recorded with the phase it did close");
+	await h.fire("session_start", {});
+	assert.doesNotMatch(h.status(), /да, идём/, "a new session carries no answers from the last one");
 });
 
 test("the gate asks once, and an empty answer cancels the move", async () => {

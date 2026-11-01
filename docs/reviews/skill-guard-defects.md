@@ -16,9 +16,9 @@
 | D3 | `index.ts:46` | `/skill:<любое имя>` ставило фазу: опечатка и `domain-modeling` молча снимали охрану | средняя | исправлено |
 | D4 | `tsconfig.json:21` | Тесты исключены из `tsc` — «tsc чисто» их не покрывало | низкая | исправлено |
 | D5 | `engine.ts:30` | `ctx_edit` считался `write`, а `edit` — отдельной возможностью, которую никто не мог использовать | низкая | исправлено |
-| D9 | `engine.ts:34` | Комментарий: «Unknown tools … are always allowed» — в открытой фазе они уходят в диалог или блок | средняя | исправлено |
+| D9 | `engine.ts:27` | Комментарий: «Unknown tools … are always allowed» — в открытой фазе они уходят в диалог или блок | средняя | исправлено |
 | D10 | `index.ts:9` | Комментарий: «any unknown skill works as before» — опровергается кодом и тестом `reading an uncontracted skill does not lift the phase` | средняя | исправлено |
-| D6 | `contracts.ts:44,69` | Цитата гейта — не условие конца фазы | средняя | спорное |
+| D6 | `contracts.ts:44,56,69` | Три цитаты гейтов — не условия конца фазы | средняя | исправлено |
 | D7 | `index.ts` весь | Из фазы нельзя выйти: сессия остаётся ограниченной до перезапуска | средняя | спорное |
 | D8 | `index.ts:79` | Ответ пользователя на гейт нигде не хранится | низкая | исправлено |
 | D11 | `contracts.ts:4` | Шапка: «A skill with no contract is unguarded: every tool is allowed» — опровергается кодом | средняя | исправлено |
@@ -124,31 +124,31 @@ entered from anywhere». Это спецификация контрактов �
 
 ---
 
-## Спорные
-
+## Детали находок (открыта только D7)
 ### D6. Цитата гейта — не условие конца
 
-`contracts.ts:44` — `grilling`:
+Плохих цитат было три, а не две:
 
-> Work the tree in **rounds**. The **frontier** is every decision whose prerequisites are already settled…
+- `contracts.ts:44` — `grilling`: «Work the tree in **rounds**. The **frontier** is every decision
+  whose prerequisites are already settled…» — описание процедуры.
+- `contracts.ts:56` — `grill-me`: «the same relentless interview as `/grill-with-docs`, but
+  **stateless**…» — описание скилла. В собственном `grill-me/SKILL.md` условия конца нет
+  вовсе, только «Call the Skill tool with "grilling"».
+- `contracts.ts:69` — `grill-with-docs`: «Skill tool twice, for "grilling" and
+  "domain-modeling"» — инструкция.
 
-Это описание процедуры, а вопрос рядом: «Интервью закончено?»
+Настоящее условие конца есть только у `grilling`, `SKILL.md:30`:
 
-`contracts.ts:69` — `grill-with-docs`:
+> The session is done when the frontier is empty: every branch of the design tree visited, nothing left silently assumed.
 
-> Skill tool twice, for "grilling" and "domain-modeling"
+`grill-me` и `grill-with-docs` делегируют в него (`grill-me/SKILL.md:7`,
+`grill-with-docs/SKILL.md:7`), поэтому все три гейта получили `source: "grilling"` и
+эту цитату. Дословность проверяет `contracts.test.ts` («every gate quote is verbatim in
+its skill»).
 
-Тоже инструкция, а не критерий готовности.
-
-Остальные три цитаты — настоящие условия конца (`Check with the user that these seams
-match…`, `Each slice is sized to fit in a single fresh context window`, и цитата
-`grill-me` из `ask-matt`).
-
-Последствие: в двух фазах пользователь видит доказательство, которое не отвечает на
-заданный вопрос, и отвечает «да» на глазок. Гейт держится на цитате; если цитата не та,
-механизм не работает.
-
-Правка требует других цитат из тех же файлов — это решение, а не строка.
+Последствие неисправленного дефекта: пользователь видит у гейта доказательство,
+которое не отвечает на заданный вопрос, и отвечает «да» на глазок. Гейт держится
+на цитате; если цитата не та, механизм не работает.
 
 ### D7. Из фазы нельзя выйти
 
@@ -170,8 +170,11 @@ match…`, `Each slice is sized to fit in a single fresh context window`, и ц�
 В `GLOSSARY.md` «Обход» определён как «осознанный отказ от гейта с записанной причиной».
 Записывался только факт, не причина.
 
-Исправлено: ответ хранится по имени фазы и показывается в статусной строке
-(`phase: grilling → … · <ответ>`), очищается при смене фазы и новой сессии.
+Исправлено: ответ хранится в `lastClosure` вместе с фазой, которую он закрыл, и
+показывается в статусной строке следующей фазы (`phase: to-spec → … · закрыли grilling:
+да, идём`). При возврате в ту же фазу он подавляется (`lastClosure.phase !== c?.name`),
+чтобы не выдаваться за текущий; новая сессия и `/skill:` его сбрасывают. Тест —
+`the answer that closed a phase is recorded and does not survive a new session`.
 
 ---
 
@@ -187,6 +190,7 @@ match…`, `Each slice is sized to fit in a single fresh context window`, и ц�
 | D9 | Комментарий `grantFor` описывает реальное поведение. |
 | D10 | Заголовок адаптера описывает реальное поведение. |
 | D11 | Шапка `contracts.ts` больше не обещает, что скилл без контракта снимает охрану. |
-| D8 | Ответ на гейт хранится по фазе и виден в статусной строке. |
+| D8 | Ответ на гейт хранится с фазой, которую закрыл; виден в статусной строке и не может выдать себя за текущий. |
+| D6 | Три гейта ссылаются на настоящее условие конца `grilling`, `source` исправлен на `grilling`. |
 
-Проверка: `npx tsc --noEmit` чисто (вместе с тестами), `npm test` 34/34.
+Проверка: `npx tsc --noEmit` чисто (вместе с тестами), `npm test` 35/35.

@@ -20,15 +20,17 @@ export default function (pi: ExtensionAPI): void {
 	const state: GuardState = { phase: null, gatesPassed: [] };
 	/** `${phase}:${tool}` the user already allowed, so one answer does not cost a dialog per call. */
 	const allowed = new Set<string>();
-	/** The answer that closed each phase: an Обход needs its reason, not just the fact. */
-	const reasons = new Map<string, string>();
+	/** The last answer that closed a phase: history for the next one, never the current one's own. */
+	let lastClosure: { phase: string; answer: string } | null = null;
 
 	const showPhase = (ui: { setStatus: (key: string, text: string | undefined) => void }) => {
 		const c = contractOf(CONTRACTS, state.phase);
-		const why = c && reasons.get(c.name);
+		// Suppressed when the flow is in that very phase again: the answer closed a past
+		// visit, and showing it there would state it as the current one.
+		const why = lastClosure && lastClosure.phase !== c?.name ? ` · закрыли ${lastClosure.phase}: ${lastClosure.answer}` : "";
 		ui.setStatus(
 			"skill-guard",
-			c ? `phase: ${c.name} → ${c.successors.join(" | ") || "—"}${why ? ` · ${why}` : ""}` : undefined,
+			c ? `phase: ${c.name} → ${c.successors.join(" | ") || "—"}${why}` : undefined,
 		);
 	};
 
@@ -36,7 +38,7 @@ export default function (pi: ExtensionAPI): void {
 		state.phase = null;
 		state.gatesPassed = [];
 		allowed.clear();
-		reasons.clear();
+		lastClosure = null;
 	};
 
 	pi.on("session_start", (_event, ctx) => {
@@ -56,7 +58,7 @@ export default function (pi: ExtensionAPI): void {
 		state.phase = name;
 		state.gatesPassed = [];
 		allowed.clear();
-		reasons.clear();
+		lastClosure = null;
 		showPhase(ctx.ui);
 	});
 
@@ -88,7 +90,7 @@ export default function (pi: ExtensionAPI): void {
 						};
 					}
 					state.gatesPassed.push(state.phase);
-					reasons.set(state.phase, answer.trim());
+					lastClosure = { phase: state.phase, answer: answer.trim() };
 					ctx.ui.notify(`skill-guard: ответ записан → ${name}`, "info");
 				}
 			}

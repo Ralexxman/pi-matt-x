@@ -41,7 +41,7 @@ export const CONTRACTS: readonly Contract[] = [
 		grants: ["read"],
 		successors: ["grill-me", "grill-with-docs", "domain-modeling"],
 		gate: {
-			quote: "Work the tree in **rounds**. The **frontier** is every decision whose prerequisites are already settled: the questions you can ask _now_ without guessing at answers you haven't heard yet.",
+			quote: "The session is done when the frontier is empty: every branch of the design tree visited, nothing left silently assumed.",
 			question: "Интервью закончено? Что осталось нерешённым?",
 		},
 	},
@@ -52,8 +52,8 @@ export const CONTRACTS: readonly Contract[] = [
 		successors: ["grilling", "grill-with-docs", "to-spec", "to-tickets", "implement"],
 		gate: {
 			// grill-me inherits its own process from the router's description of it.
-			source: "ask-matt",
-			quote: "the same relentless interview as `/grill-with-docs`, but **stateless**: it saves nothing locally and builds no `GLOSSARY.md`.",
+			source: "grilling",
+			quote: "The session is done when the frontier is empty: every branch of the design tree visited, nothing left silently assumed.",
 			question: "План выяснен? Что осталось нерешённым?",
 		},
 	},
@@ -66,7 +66,8 @@ export const CONTRACTS: readonly Contract[] = [
 		// says to call it. Listed first so it reads as the step it is.
 		successors: ["grilling", "to-spec", "domain-modeling", "prototype"],
 		gate: {
-			quote: 'Skill tool twice, for "grilling" and "domain-modeling"',
+			source: "grilling",
+			quote: "The session is done when the frontier is empty: every branch of the design tree visited, nothing left silently assumed.",
 			question: "GLOSSARY.md и ADR записаны, решения приняты? Пора в спеку?",
 		},
 	},
