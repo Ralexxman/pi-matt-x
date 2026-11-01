@@ -10,7 +10,7 @@
  * with the skill it came from.
  */
 
-export type Grant = "read" | "write" | "edit" | "bash";
+export type Grant = "read" | "write" | "bash";
 
 /**
  * Skills the flow runs *inside* another phase rather than moving to it. Entering one
@@ -61,7 +61,7 @@ export const CONTRACTS: readonly Contract[] = [
 		// Runs the same interview as grill-me but leaves a paper trail: docs only,
 		// so all write tools are granted.
 		name: "grill-with-docs",
-		grants: ["read", "write", "edit"],
+		grants: ["read", "write"],
 		// `grilling` is not a next phase but the interview this one runs: the skill
 		// says to call it. Listed first so it reads as the step it is.
 		successors: ["grilling", "to-spec", "domain-modeling", "prototype"],
@@ -91,17 +91,17 @@ export const CONTRACTS: readonly Contract[] = [
 	},
 	{
 		name: "implement",
-		grants: ["read", "write", "edit", "bash"],
+		grants: ["read", "write", "bash"],
 		successors: ["tdd", "code-review", "diagnosing-bugs", "retro", "pr", "handoff"],
 	},
 	{
 		name: "implement-spec",
-		grants: ["read", "write", "edit", "bash"],
+		grants: ["read", "write", "bash"],
 		successors: ["tdd", "code-review", "diagnosing-bugs", "retro", "pr", "handoff"],
 	},
 	{
 		name: "tdd",
-		grants: ["read", "write", "edit", "bash"],
+		grants: ["read", "write", "bash"],
 		successors: ["code-review"],
 	},
 	{
@@ -113,12 +113,12 @@ export const CONTRACTS: readonly Contract[] = [
 	{
 		// Fixes the bug, so it writes; entered only once the flow reached it.
 		name: "diagnosing-bugs",
-		grants: ["read", "write", "edit", "bash"],
+		grants: ["read", "write", "bash"],
 		successors: ["tdd", "code-review", "retro"],
 	},
 	{
 		name: "prototype",
-		grants: ["read", "write", "edit", "bash"],
+		grants: ["read", "write", "bash"],
 		successors: ["grill-with-docs", "to-spec", "implement"],
 	},
 ];

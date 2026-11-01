@@ -18,24 +18,36 @@ export type Decision =
 	| { allow: true; phase: string | null; }
 	| { allow: false; reason: string; };
 
-/** Tools that only read. Everything else that writes or executes is mapped explicitly. */
+/**
+ * Tools that only read. Taken from the live tool list of this install (pi-lean-ctx
+ * extensions/index.ts, pi-lens dist, llm-wiki): a name missing here is not dangerous,
+ * it just costs one permission question inside a read-only phase.
+ */
 const READ_ONLY_TOOLS = new Set([
 	"read", "grep", "find", "ls",
-	// the same four as they arrive from the extensions installed alongside this one
 	"ctx_read", "ctx_grep", "ctx_find", "ctx_ls", "ctx_tree", "ctx_overview",
-	"ctx_search", "ctx_semantic_search", "ctx_graph", "lens_diagnostics",
+	"ctx_search", "ctx_semantic_search", "ctx_graph", "ctx_expand", "lens_diagnostics",
 	"symbol_search", "read_symbol", "read_enclosing", "module_report", "project_report",
+	"ast_grep_search", "ast_grep_outline", "lsp_navigation",
 	"wiki_search", "wiki_recall", "wiki_status",
 ]);
 
-/** bash, powershell and every wrapper that ultimately runs a command or an agent with tools. */
-const EXEC_TOOLS = new Set(["bash", "powershell", "pwsh", "shell", "ctx_shell", "codemode", "subagent", "workflow"]);
+/** Every tool that runs a command, a CLI or an agent that has tools of its own. */
+const EXEC_TOOLS = new Set([
+	"bash", "powershell", "pwsh", "shell", "ctx_shell",
+	"lean_ctx", "ctx_call", "codemode", "subagent", "workflow",
+]);
 
-/** Pi tool name → the capability it needs. Unknown tools map to null and are always allowed. */
+/** Every tool that changes a file. */
+const EDIT_TOOLS = new Set(["edit", "write", "ctx_edit", "ast_grep_replace"]);
+
+/**
+ * Pi tool name → the capability it needs. A tool this guard does not know maps to null:
+ * allowed when no phase is open, and the user's decision inside one (needsPermission).
+ */
 export function grantFor(tool: string): Grant | null {
 	if (READ_ONLY_TOOLS.has(tool)) return "read";
-	if (tool === "write" || tool === "ctx_edit") return "write";
-	if (tool === "edit") return "edit";
+	if (EDIT_TOOLS.has(tool)) return "write";
 	// Anything that can run arbitrary code or spawn an agent that can is `bash` — otherwise
 	// a denied `bash` would be one tool name away from being bypassed.
 	if (EXEC_TOOLS.has(tool)) return "bash";
@@ -54,12 +66,6 @@ export function contractOf(contracts: readonly Contract[], name: string | null):
 export function skillNameFromPath(path: string): string | null {
 	const m = /(?:^|[\\/])([^\\/]+)[\\/]SKILL\.md$/i.exec(path.trim());
 	return m ? m[1] : null;
-}
-
-export function nextPhases(contracts: readonly Contract[], state: GuardState): string[] {
-	const c = contractOf(contracts, state.phase);
-	if (!c) return [];
-	return c.successors;
 }
 
 function blocked(reason: string): Decision {

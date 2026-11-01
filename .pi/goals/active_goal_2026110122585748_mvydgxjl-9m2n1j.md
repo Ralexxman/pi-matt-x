@@ -5,14 +5,14 @@
   "status": "active",
   "autoContinue": true,
   "usage": {
-    "tokensUsed": 120443,
-    "activeSeconds": 102
+    "tokensUsed": 166372,
+    "activeSeconds": 416
   },
   "sisyphus": false,
   "createdAt": "2026-11-01T21:58:57.489Z",
-  "updatedAt": "2026-11-01T22:00:57.884Z",
+  "updatedAt": "2026-11-01T22:06:35.350Z",
   "activePath": ".pi/goals/active_goal_2026110122585748_mvydgxjl-9m2n1j.md",
-  "revision": 29,
+  "revision": 59,
   "scheduler": {
     "version": 1,
     "owner": "01a197a6-fd44-715a-a5e3-04e23cdbaa37",
@@ -51,14 +51,15 @@
       {
         "id": "fixes",
         "title": "Мелкие правки и тесты",
-        "status": "pending",
-        "verificationContract": "Правки только на 1-2 строки внесены, каждая с тестом; npx tsc --noEmit чисто; npm test 0 fail и не меньше 29 тестов; отчёт обновлён статусом по каждой закрытой находке; коммит, пуш, pi update --extensions."
+        "status": "complete",
+        "verificationContract": "Правки только на 1-2 строки внесены, каждая с тестом; npx tsc --noEmit чисто; npm test 0 fail и не меньше 29 тестов; отчёт обновлён статусом по каждой закрытой находке; коммит, пуш, pi update --extensions.",
+        "completedAt": "2026-11-01T22:01:26.184Z",
+        "evidence": "4 правки на 1-2 строки (engine.ts:22,55; index.ts:46; tsconfig.json:21), 2 новых теста, 31/31 pass, tsc чисто вместе с тестами, коммит b76b1eb запушен и установлен (pi update --extensions), статусы в "
       }
     ],
     "blockCompletion": false,
     "proposedAt": "2026-11-01T21:58:55.322Z"
-  },
-  "currentTaskId": "fixes"
+  }
 }
 
 # Goal Prompt
@@ -70,12 +71,12 @@
 - Status: running
 - Auto-continue: on
 - Sisyphus mode: no
-- Time spent: 1m42s
-- Tokens used: 120K (120,443) tokens
+- Time spent: 6m56s
+- Tokens used: 166K (166,372) tokens
 ## Tasks
 
 <!-- blockCompletion: false -->
 - [x] audit: Аудит движка, адаптера и контрактов — evidence: docs/reviews/skill-guard-defects.md: 8 находок (D1-D4 исправляемые, D5-D8 спорные), каждая с file:line; сверено с ~/.agents/skills (pr/handoff/retro существуют без контрактов).
 - [x] report: Отчёт с находками и степенью важности — evidence: docs/reviews/skill-guard-defects.md: сводная таблица со severity, 8 находок с file:line/последствием/вариантами, спорные D5-D8 отдельным разделом.
-- [ ] fixes: Мелкие правки и тесты — contract: Правки только на 1-2 строки внесены, каждая с тестом; npx tsc --noEmit чисто; npm test 0 fail и не меньше 29 тестов; отчёт обновлён статусом по каждой закрытой находке; коммит, пуш, pi update --extensions.
+- [x] fixes: Мелкие правки и тесты — evidence: 4 правки на 1-2 строки (engine.ts:22,55; index.ts:46; tsconfig.json:21), 2 новых теста, 31/31 pass, tsc чисто вместе с тестами, коммит b76b1eb запушен и установлен (pi update --extensions), статусы в 
 

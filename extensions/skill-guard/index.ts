@@ -5,9 +5,9 @@
  * model reading a skill's SKILL.md. That read is the only transition point, so it is
  * the only place order is enforced; tool calls are the only place capability is.
  *
- * Not guarded: model-invoked skills that have no contract (any unknown skill works as
- * before), and headless runs (json/print modes have no dialog, so the gate degrades to
- * a notification instead of deadlocking).
+ * Not guarded: a skill with no contract is readable from any phase and stays readable,
+ * but it does not lift or change the open phase either; and headless runs (json/print
+ * modes have no dialog, so the gate degrades to a notification instead of deadlocking).
  *
  * shortcut: the phase lives in memory only, so /reload or a resumed session starts
  * unguarded until the next SKILL.md read. Persist it if that turns out to hurt.
@@ -43,8 +43,9 @@ export default function (pi: ExtensionAPI): void {
 	pi.on("input", (event, ctx) => {
 		const m = /^\/skill:([\w-]+)/.exec(event.text.trim());
 		const name = m?.[1];
-		// A typo must not look armed: only a skill the guard knows becomes a phase.
-		if (!name || (!contractOf(CONTRACTS, name) && !SUB_SKILLS.has(name))) return;
+		// A typo, or a skill outside the flow, must not look armed: only a contract makes a
+		// phase. `research` or a sub-skill named here leaves the flow as it is.
+		if (!name || !contractOf(CONTRACTS, name)) return;
 		state.phase = name;
 		state.gatesPassed = [];
 		allowed.clear();

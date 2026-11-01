@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { CONTRACTS } from "./contracts.ts";
-import { decide, grantFor, needsGate, needsPermission, nextPhases, skillNameFromPath, type GuardState } from "./engine.ts";
+import { decide, grantFor, needsGate, needsPermission, skillNameFromPath, type GuardState } from "./engine.ts";
 
 const at = (phase: string | null, gatesPassed: string[] = []): GuardState => ({ phase, gatesPassed });
 const tool = (name: string) => ({ kind: "tool" as const, tool: name });
@@ -101,7 +101,7 @@ test("every successor is a reachable skill or an unknown one", () => {
 		assert.ok(c.successors.length > 0, `${c.name} has no way out`);
 		assert.ok(!c.successors.includes(c.name), `${c.name} loops to itself`);
 	}
-	assert.deepEqual(nextPhases(CONTRACTS, at("tdd")), ["code-review"]);
+	assert.deepEqual(CONTRACTS.find((c) => c.name === "tdd")?.successors, ["code-review"]);
 });
 
 test("SKILL.md paths are recognised and nothing else is", () => {
@@ -121,6 +121,11 @@ test("capability mapping covers Pi's own tool names", () => {
 	for (const t of ["bash", "powershell", "pwsh", "shell", "ctx_shell", "codemode", "subagent", "workflow"]) {
 		assert.equal(grantFor(t), "bash", t);
 	}
+});
+
+test("a tool that writes or executes is never mapped as read", () => {
+	for (const t of ["write", "edit", "ctx_edit", "ast_grep_replace"]) assert.notEqual(grantFor(t), "read", t);
+	for (const t of ["lean_ctx", "ctx_call"]) assert.equal(grantFor(t), "bash", t);
 });
 
 test("read-only tools of the installed extensions need no permission", () => {
