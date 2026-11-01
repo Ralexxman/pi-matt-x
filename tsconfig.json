@@ -1,0 +1,22 @@
+{
+	"compilerOptions": {
+		"target": "ES2022",
+		"lib": ["ES2023"],
+		"module": "NodeNext",
+		"moduleResolution": "NodeNext",
+		"strict": true,
+		"noEmit": true,
+		"allowImportingTsExtensions": true,
+		"skipLibCheck": true,
+		"baseUrl": ".",
+		"ignoreDeprecations": "6.0",
+		"paths": {
+			"@earendil-works/pi-coding-agent": [
+				"C:/Users/ralex/.pi/agent/install/releases/1.4.0/node_modules/@earendil-works/pi-coding-agent/dist/index.d.ts"
+			]
+		}
+	},
+	"include": ["extensions/**/*.ts"],
+	// Tests import node:test / node:fs; they are typechecked by running them instead.
+	"exclude": ["extensions/**/*.test.ts"]
+}

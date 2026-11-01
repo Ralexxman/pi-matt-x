@@ -1,0 +1,14 @@
+{
+	"name": "pi-matt-x",
+	"version": "0.1.0",
+	"description": "Pi extension that keeps the model inside the Matt Pocock skill flow",
+	"private": true,
+	"keywords": ["pi-package"],
+	"pi": {
+		"extensions": ["./extensions/skill-guard/index.ts"]
+	},
+	"scripts": {
+		"check": "tsc --noEmit",
+		"test": "node --test extensions/skill-guard/*.test.ts"
+	}
+}

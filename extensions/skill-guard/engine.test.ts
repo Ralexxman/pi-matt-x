@@ -1,0 +1,103 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { CONTRACTS } from "./contracts.ts";
+import { decide, grantFor, needsGate, needsPermission, nextPhases, skillNameFromPath, type GuardState } from "./engine.ts";
+
+const at = (phase: string | null, gatesPassed: string[] = []): GuardState => ({ phase, gatesPassed });
+const tool = (name: string) => ({ kind: "tool" as const, tool: name });
+const skill = (name: string) => ({ kind: "skill" as const, name });
+
+test("cold start is unguarded", () => {
+	assert.equal(decide(at(null), tool("bash"), CONTRACTS).allow, true);
+	assert.equal(decide(at(null), skill("to-tickets"), CONTRACTS).allow, true);
+});
+
+test("grilling grants nothing that touches the repo", () => {
+	assert.equal(decide(at("grilling"), tool("write"), CONTRACTS).allow, false);
+	assert.equal(decide(at("grilling"), tool("bash"), CONTRACTS).allow, false);
+	assert.equal(decide(at("grilling"), tool("read"), CONTRACTS).allow, true);
+});
+
+test("the block message names the phase and its next steps", () => {
+	const d = decide(at("grilling"), tool("write"), CONTRACTS);
+	assert.equal(d.allow, false);
+	if (d.allow) return;
+	assert.match(d.reason, /grilling/);
+	assert.match(d.reason, /grill-with-docs/);
+});
+
+test("a phase cannot be skipped", () => {
+	const d = decide(at("grilling"), skill("to-spec"), CONTRACTS);
+	assert.equal(d.allow, false);
+	if (d.allow) return;
+	assert.match(d.reason, /to-spec/);
+});
+
+test("a successor can be entered and becomes the phase", () => {
+	const d = decide(at("grilling"), skill("grill-with-docs"), CONTRACTS);
+	assert.equal(d.allow, true);
+	if (!d.allow) return;
+	assert.equal(d.phase, "grill-with-docs");
+});
+
+test("re-reading the current skill changes nothing", () => {
+	const d = decide(at("implement"), skill("implement"), CONTRACTS);
+	assert.equal(d.allow, true);
+});
+
+test("implement writes, code-review does not", () => {
+	assert.equal(decide(at("implement"), tool("edit"), CONTRACTS).allow, true);
+	assert.equal(decide(at("code-review"), tool("edit"), CONTRACTS).allow, false);
+	assert.equal(decide(at("code-review"), tool("bash"), CONTRACTS).allow, true);
+});
+
+test("a skill without a contract stays usable from anywhere", () => {
+	assert.equal(decide(at("grilling"), skill("my-own-skill"), CONTRACTS).allow, true);
+	assert.equal(decide(at("grilling"), tool("ctx_shell"), CONTRACTS).allow, false);
+});
+
+test("a skill without a contract leaves the phase alone", () => {
+	const d = decide(at("grilling"), skill("research"), CONTRACTS);
+	assert.equal(d.allow, true);
+	assert.equal(d.phase, "grilling");
+});
+
+test("an unknown tool needs permission only where commands are denied", () => {
+	assert.equal(needsPermission(at("grilling"), "mcp_search", CONTRACTS), true);
+	assert.equal(needsPermission(at("implement"), "mcp_search", CONTRACTS), false);
+	assert.equal(needsPermission(at(null), "mcp_search", CONTRACTS), false);
+	assert.equal(needsPermission(at("grilling"), "read", CONTRACTS), false);
+});
+
+test("gate is asked once, for the phase that has one", () => {
+	assert.ok(needsGate(CONTRACTS, at("grilling")));
+	assert.equal(needsGate(CONTRACTS, at("grilling", ["grilling"])), undefined);
+	assert.equal(needsGate(CONTRACTS, at("implement")), undefined);
+});
+
+test("every successor is a reachable skill or an unknown one", () => {
+	for (const c of CONTRACTS) {
+		assert.ok(c.successors.length > 0, `${c.name} has no way out`);
+		assert.ok(!c.successors.includes(c.name), `${c.name} loops to itself`);
+	}
+	assert.deepEqual(nextPhases(CONTRACTS, at("tdd")), ["code-review"]);
+});
+
+test("SKILL.md paths are recognised and nothing else is", () => {
+	assert.equal(skillNameFromPath("C:\\Users\\x\\.agents\\skills\\grilling\\SKILL.md"), "grilling");
+	assert.equal(skillNameFromPath("/home/x/skills/tdd/SKILL.md"), "tdd");
+	assert.equal(skillNameFromPath("./extensions/skill-guard/index.ts"), null);
+	assert.equal(skillNameFromPath("C:\\x\\SKILL.md"), "x");
+	assert.equal(skillNameFromPath("SKILL.md"), null);
+});
+
+test("capability mapping covers Pi's own tool names", () => {
+	assert.equal(grantFor("read"), "read");
+	assert.equal(grantFor("ctx_shell"), "bash");
+	assert.equal(grantFor("Write"), null);
+	// every tool that can run a command or an agent is bash, so a denied bash cannot be
+	// bypassed by picking another one
+	for (const t of ["bash", "powershell", "pwsh", "shell", "ctx_shell", "codemode", "subagent", "workflow"]) {
+		assert.equal(grantFor(t), "bash", t);
+	}
+});
