@@ -51,7 +51,8 @@ export const CONTRACTS: readonly Contract[] = [
 		grants: ["read"],
 		successors: ["grilling", "grill-with-docs", "to-spec", "to-tickets", "implement"],
 		gate: {
-			// grill-me inherits its own process from the router's description of it.
+			// grill-me delegates the interview itself (`grill-me/SKILL.md:7`), so the end
+			// condition is grilling's.
 			source: "grilling",
 			quote: "The session is done when the frontier is empty: every branch of the design tree visited, nothing left silently assumed.",
 			question: "План выяснен? Что осталось нерешённым?",

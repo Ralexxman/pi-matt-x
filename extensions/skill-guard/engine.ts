@@ -60,8 +60,8 @@ export function contractOf(contracts: readonly Contract[], name: string | null):
 }
 
 /**
- * Skill name of a SKILL.md path, or null for any other file.
- * Also matches the `<name>` of a `/<name>` mention, which is how a skill is loaded.
+ * Skill name of a `SKILL.md` path, or null for any other file. `/skill:<name>` mentions
+ * are not paths: `index.ts` reads them from the input event, not through here.
  */
 export function skillNameFromPath(path: string): string | null {
 	const m = /(?:^|[\\/])([^\\/]+)[\\/]SKILL\.md$/i.exec(path.trim());
