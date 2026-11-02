@@ -15,7 +15,7 @@
 | D2 | `engine.ts:55` | `filter((s) => … \|\| s)` — всегда истинно; сама `nextPhases` не вызывалась нигде, кроме теста | низкая | исправлено |
 | D3 | `index.ts:46` | `/skill:<любое имя>` ставило фазу: опечатка и `domain-modeling` молча снимали охрану | средняя | исправлено |
 | D4 | `tsconfig.json:21` | Тесты исключены из `tsc` — «tsc чисто» их не покрывало | низкая | исправлено |
-| D5 | `engine.ts:30` | `ctx_edit` считался `write`, а `edit` — отдельной возможностью, которую никто не мог использовать | низкая | исправлено |
+| D5 | `engine.ts:30` | `edit` и `write` выдавались в контрактах вразнобой: `to-tickets` (`["read","write","bash"]`) писал, но `edit` в нём был закрыт | низкая | исправлено |
 | D9 | `engine.ts:27` | Комментарий: «Unknown tools … are always allowed» — в открытой фазе они уходят в диалог или блок | средняя | исправлено |
 | D10 | `index.ts:9` | Комментарий: «any unknown skill works as before» — опровергается кодом и тестом `reading an uncontracted skill does not lift the phase` | средняя | исправлено |
 | D6 | `contracts.ts:44,56,69` | Три цитаты гейтов — не условия конца фазы | средняя | исправлено |
@@ -24,7 +24,7 @@
 | D11 | `contracts.ts:4` | Шапка: «A skill with no contract is unguarded: every tool is allowed» — опровергается кодом | средняя | исправлено |
 | D12 | `contracts.ts:54` | Комментарий: `grill-me` берёт процесс «из описания роутера», а `source` указывает на `grilling` | средняя | исправлено |
 | D13 | `engine.ts:45` | Комментарий `skillNameFromPath`: «матчит и `<name>` из `/<name>`» — регексп требует `SKILL.md` | средняя | исправлено |
-| D14 | `contracts.ts:110` | «Read-only on purpose» при `grants: ["read","bash"]` — `bash` пишет; 7 контрактов дают `bash`, поэтому `read`/`write` не обеспечены | высокая | комментарий исправлен, сужение прав открыто |
+| D14 | `contracts.ts:108` | «Read-only on purpose» при `grants: ["read","bash"]` — `bash` пишет; 8 контрактов дают `bash`, поэтому `read`/`write` не обеспечены | высокая | комментарий исправлен, сужение прав открыто |
 | D15 | `index.ts:96` | `gatesPassed` не очищался при возврате в фазу: второй уход из неё проходил без гейта | высокая | исправлено |
 
 ---
@@ -97,25 +97,33 @@ not lift the open phase"`.
 
 Проверка: с тестами в `include` `tsc` проходит без ошибок, исключение убрано.
 
-## D5. В контрактах жила возможность, которой не было у половины фаз
+## D5. `edit` и `write` выдавались вразнобой
 
 `engine.ts:30`: `if (tool === "write" || tool === "ctx_edit") return "write";` — а `edit`
-отдавал `"edit"`, и семь контрактов на `b2a2cc4` давали `"edit"` прямо. То есть механизм
-работал, но непоследовательно: `grill-with-docs` давал `["read", "write"]`, поэтому
-`write` проходил, а собственный инструмент Pi `edit` — нет. Симметрично `"edit"` без
-`"write"` не давал бы `ctx_edit`.
+отдавал `"edit"`. На `b2a2cc4` этот механизм работал: шесть контрактов давали `"edit"`
+прямо (`grill-with-docs`, `implement`, `implement-spec`, `tdd`, `diagnosing-bugs`,
+`prototype`), и `decide(at("implement"), tool("edit"))` проходил именно через эту выдачу.
+
+Дефект — асимметрия. Единственный контракт с `write`, но без `edit` — `to-tickets`
+(`["read","write","bash"]`): писать он мог, а собственный инструмент Pi `edit` в нём
+блокировался. Обратная сторона тоже была бы сломана: `edit` без `write` не открыл бы
+`ctx_edit`, потому что тот маппится в `write`.
 
 Исправлено: `Grant = "read" | "write" | "bash"`, `edit`, `write`, `ctx_edit`,
 `ast_grep_replace` одинаково требуют `write`, и ни одна фаза больше не называет
-возможность, которую невозможно выдать.
+возможность, которую нельзя выдать.
 
 ## D14. `bash` шире, чем обещают grant-листы
 
-`contracts.ts:110`: «Read-only on purpose: review reports, it does not fix» — рядом
-`grants: ["read", "bash"]`. `bash` — это целая оболочка (`sed -i`, `git commit`), движок
-смотрит только `toolName`, поэтому `code-review` может писать. Семь из одиннадцати
-контрактов дают `bash`, и для них список `read`/`write` не обеспечен: `grill-with-docs`
-даёт `["read", "write"]` и всё равно может выполнить `git commit` через `bash`.
+`contracts.ts:108`: «Read-only on purpose: review reports, it does not fix» — рядом, на
+строке 110, `grants: ["read", "bash"]`. `bash` — это целая оболочка (`sed -i`, `git commit`),
+движок смотрит только `toolName`, поэтому `code-review` может писать: его собственный
+тест рядом проверяет `bash === true`.
+
+Шире это не только у него: на `b2a2cc4` восемь из одиннадцати контрактов давали `bash`
+(`to-spec`, `to-tickets`, `implement`, `implement-spec`, `tdd`, `code-review`,
+`diagnosing-bugs`, `prototype`), и для них список `read`/`write` не обеспечен — `to-tickets`
+с `["read","write","bash"]` может выполнить в `bash` и то, чего в `write` нет.
 
 Комментарий исправлен (одна строка) — он теперь говорит, что фаза может писать через
 `bash`. Сузить сами права — не правка в две строки: нужен разбор команд, а не grant
