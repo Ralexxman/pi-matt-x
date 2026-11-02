@@ -66,7 +66,8 @@ export default function (pi: ExtensionAPI): void {
 	pi.on("tool_call", async (event, ctx) => {
 		const input = (event as { input?: Record<string, unknown> }).input ?? {};
 
-		// Entering a phase: the model reads that phase's SKILL.md (or a `/name` mention).
+		// Entering a phase: the model reads that phase's SKILL.md. A `/skill:<name>` mention
+		// is not a path and is handled in the `input` handler above.
 		if (event.toolName === "read" && typeof input.path === "string") {
 			const name = skillNameFromPath(input.path);
 			if (!name) return;

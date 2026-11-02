@@ -17,7 +17,7 @@
 | D4 | `tsconfig.json:21` | Тесты исключены из `tsc` — «tsc чисто» их не покрывало | низкая | исправлено |
 | D5 | `engine.ts:30` | `edit` и `write` выдавались в контрактах вразнобой: `to-tickets` (`["read","write","bash"]`) писал, но `edit` в нём был закрыт | низкая | исправлено |
 | D9 | `engine.ts:27` | Комментарий: «Unknown tools … are always allowed» — в открытой фазе они уходят в диалог или блок | средняя | исправлено |
-| D10 | `index.ts:9` | Комментарий: «any unknown skill works as before» — опровергается кодом и тестом `reading an uncontracted skill does not lift the phase` | средняя | исправлено |
+| D10 | `index.ts:8` | Комментарий: «any unknown skill works as before» — опровергается кодом и тестом `reading an uncontracted skill does not lift the phase` | средняя | исправлено |
 | D6 | `contracts.ts:44,56,69` | Три цитаты гейтов — не условия конца фазы | средняя | исправлено |
 | D7 | `index.ts` весь | Из фазы нельзя выйти: сессия остаётся ограниченной до перезапуска | средняя | спорное |
 | D8 | `index.ts:79` | Ответ пользователя на гейт нигде не хранится | низкая | исправлено |
@@ -25,7 +25,8 @@
 | D12 | `contracts.ts:54` | Комментарий: `grill-me` берёт процесс «из описания роутера», а `source` указывает на `grilling` | средняя | исправлено |
 | D13 | `engine.ts:45` | Комментарий `skillNameFromPath`: «матчит и `<name>` из `/<name>`» — регексп требует `SKILL.md` | средняя | исправлено |
 | D14 | `contracts.ts:108` | «Read-only on purpose» при `grants: ["read","bash"]` — `bash` пишет; 8 контрактов дают `bash`, поэтому `read`/`write` не обеспечены | высокая | комментарий исправлен, сужение прав открыто |
-| D15 | `index.ts:96` | `gatesPassed` не очищался при возврате в фазу: второй уход из неё проходил без гейта | высокая | исправлено |
+| D15 | `index.ts:79` | `gatesPassed` не очищался при возврате в фазу: второй уход из неё проходил без гейта | высокая | исправлено |
+| D16 | `index.ts:69` | Комментарий ветки `tool_call`: «(or a `/name` mention)» — ветка видит только пути к `SKILL.md` | средняя | исправлено |
 
 ---
 
@@ -137,7 +138,7 @@ not lift the open phase"`.
 
 ## D10. Заголовочный комментарий адаптера
 
-`index.ts:9`: «Not guarded: model-invoked skills that have no contract (any unknown skill
+`index.ts:8-9`: «Not guarded: model-invoked skills that have no contract (any unknown skill
 works as before)». Код и тест `reading an uncontracted skill does not lift the phase`
 говорят обратное: скилл без контракта читается, но ограничения открытой фазы не снимает.
 
@@ -189,11 +190,21 @@ its skill»).
 второй визит — это новые вопрос и ответ. Тест
 `re-entering a phase spends its old answer, so leaving it again asks` требует `asked === 2`.
 
+### D16. Тот же ложный комментарий, уже в адаптере
+
+`index.ts:69`: «Entering a phase: the model reads that phase's SKILL.md (or a `/name`
+mention)». Ветка ниже вызывает `skillNameFromPath(input.path)`, а его регексп требует
+хвоста `SKILL.md`; упоминания `/skill:<name>` разбирает обработчик `input` (строки 53–64) —
+то же, что записано в D13, но в соседнем файле.
+
+Исправлено: комментарий говорит только о чтении `SKILL.md` и указывает, где живёт
+`/skill:`.
+
 ### D7. Из фазы нельзя выйти
 
-`implement`, `code-review`, `diagnosing-bugs` перечисляют в наследниках `retro`, `pr`,
-`handoff`. У этих трёх контрактов нет — они есть в `~/.agents/skills`, но не в
-`CONTRACTS`.
+`implement`, `implement-spec` и `code-review` перечисляют в наследниках `retro`, `pr`,
+`handoff` (`diagnosing-bugs` — только `tdd`, `code-review`, `retro`). У этих трёх
+контрактов нет — они есть в `~/.agents/skills`, но не в `CONTRACTS`.
 
 Скилл без контракта не меняет фазу. Значит после входа в любую фазу сессия остаётся
 ограниченной до конца: `/reload` или новая сессия — единственный выход.
@@ -260,5 +271,6 @@ loaded». Регексп `/(?:^|[\\/])([^\\/]+)[\\/]SKILL\.md$/i` требует
 | D13 | Комментарий `skillNameFromPath` говорит только о путях к `SKILL.md`. |
 | D14 | Комментарий `code-review` больше не обещает readonly при `bash`. |
 | D15 | При входе в фазу её прежнее подтверждение гейта сбрасывается (`gatesPassed.filter`), тест — `re-entering a phase spends its old answer, so leaving it again asks`. |
+| D16 | Комментарий ветки `tool_call` больше не обещает разбор `/skill:` в ней. |
 
 Проверка: `npx tsc --noEmit` чисто (вместе с тестами), `npm test` 37/37.
