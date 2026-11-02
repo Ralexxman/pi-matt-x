@@ -107,7 +107,8 @@ export const CONTRACTS: readonly Contract[] = [
 		successors: ["code-review"],
 	},
 	{
-		// Read-only on purpose: review reports, it does not fix.
+		// Reports, not fixes — but `bash` is a whole shell, so this phase can still write
+		// through it. Narrowing that needs a command allowlist, not a grant (D14).
 		name: "code-review",
 		grants: ["read", "bash"],
 		successors: ["retro", "pr", "handoff", "implement"],

@@ -66,6 +66,15 @@ test("a non-successor skill is blocked and the gate question is never asked", as
 	assert.equal(h.asked(), 0, "a blocked move must not ask anything");
 });
 
+test("re-entering a phase spends its old answer, so leaving it again asks", async () => {
+	const h = harness("да, идём");
+	await h.fire("tool_call", readSkill("grill-with-docs"));
+	await h.fire("tool_call", readSkill("prototype")); // answers the grill-with-docs gate
+	await h.fire("tool_call", readSkill("grill-with-docs")); // the cycle back spends it
+	await h.fire("tool_call", readSkill("to-spec"));
+	assert.equal(h.asked(), 2, "the second visit needs its own answer");
+});
+
 test("the answer of a closed phase does not come back when a cycle re-enters it", async () => {
 	// grill-with-docs ↔ prototype is a cycle of contracted phases, so this re-entry
 	// needs no reset and asks no second gate (prototype has none).

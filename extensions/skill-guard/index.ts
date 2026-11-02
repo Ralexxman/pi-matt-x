@@ -96,7 +96,11 @@ export default function (pi: ExtensionAPI): void {
 				}
 			}
 
-			if (decision.phase !== state.phase) allowed.clear();
+			if (decision.phase !== state.phase) {
+				allowed.clear();
+				// A phase entered again is a new visit: the answer that closed the last one is spent.
+				state.gatesPassed = state.gatesPassed.filter((p) => p !== decision.phase);
+			}
 			state.phase = decision.phase;
 			showPhase(ctx.ui);
 			return;

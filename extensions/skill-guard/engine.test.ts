@@ -74,7 +74,7 @@ test("re-reading the current skill changes nothing", () => {
 	assert.equal(d.allow, true);
 });
 
-test("implement writes, code-review does not", () => {
+test("implement writes; code-review blocks edit but keeps bash", () => {
 	assert.equal(decide(at("implement"), tool("edit"), CONTRACTS).allow, true);
 	assert.equal(decide(at("code-review"), tool("edit"), CONTRACTS).allow, false);
 	assert.equal(decide(at("code-review"), tool("bash"), CONTRACTS).allow, true);
