@@ -43,7 +43,8 @@ const EDIT_TOOLS = new Set(["edit", "write", "ctx_edit", "ast_grep_replace"]);
 
 /**
  * Pi tool name → the capability it needs. A tool this guard does not know maps to null:
- * allowed when no phase is open, and the user's decision inside one (needsPermission).
+ * allowed when no phase is open; inside one, `needsPermission` asks the user — except in a
+ * phase that grants `bash`, where the tool could do nothing the phase cannot already do.
  */
 export function grantFor(tool: string): Grant | null {
 	if (READ_ONLY_TOOLS.has(tool)) return "read";
