@@ -2,4 +2,5 @@ node_modules/
 .llm-wiki/
 .pi/hindsight/
 .pi/todos/
+.pi/skills-guard/
 *.log

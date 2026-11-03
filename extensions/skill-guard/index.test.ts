@@ -5,19 +5,26 @@
  */
 import test from "node:test";
 import assert from "node:assert/strict";
+import { mkdirSync, mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import register from "./index.ts";
 
-function harness(answer: string | undefined, permission = true) {
+function harness(answer: string | undefined, permission = true, context: Record<string, unknown> = {}) {
 	const handlers: Record<string, ((event: unknown, ctx: unknown) => unknown)[]> = {};
+	const commands: Record<string, (args: string, ctx: unknown) => Promise<void>> = {};
 	let asked = 0;
 	let confirmed = 0;
 	const statuses: string[] = [];
+	const notices: string[] = [];
 	const ui = {
 		setStatus(_key: string, text: string | undefined) {
 			statuses.push(text ?? "");
 		},
-		notify() {},
+		notify(text: string) {
+			notices.push(text);
+		},
 		editor: async () => {
 			asked++;
 			return answer;
@@ -27,9 +34,14 @@ function harness(answer: string | undefined, permission = true) {
 			return permission;
 		},
 	};
-	const pi = { on: (name: string, fn: never) => (handlers[name] ??= []).push(fn) };
+	const pi = {
+		on: (name: string, fn: never) => (handlers[name] ??= []).push(fn),
+		registerCommand: (name: string, options: { handler: (args: string, ctx: unknown) => Promise<void> }) => {
+			commands[name] = options.handler;
+		},
+	};
 	register(pi as unknown as ExtensionAPI);
-	const ctx = { ui, hasUI: true };
+	const ctx = { ui, hasUI: true, ...context };
 	const fire = async (name: string, event: unknown) => {
 		for (const handler of handlers[name] ?? []) {
 			const result = await handler(event, ctx);
@@ -37,7 +49,19 @@ function harness(answer: string | undefined, permission = true) {
 		}
 		return undefined;
 	};
-	return { fire, asked: () => asked, confirmed: () => confirmed, status: () => statuses.at(-1) ?? "" };
+	const command = async (name: string, args: string) => {
+		const handler = commands[name];
+		assert.ok(handler, `command ${name} is registered`);
+		await handler(args, ctx);
+	};
+	return {
+		fire,
+		command,
+		asked: () => asked,
+		confirmed: () => confirmed,
+		status: () => statuses.at(-1) ?? "",
+		notice: () => notices.at(-1) ?? "",
+	};
 }
 
 const readSkill = (name: string) => ({ toolName: "read", input: { path: `C:/Users/ralex/.agents/skills/${name}/SKILL.md` } });
@@ -168,4 +192,42 @@ test("/skill:name sets the phase without a read", async () => {
 	await h.fire("input", { text: "/skill:implement do the thing", source: "interactive" });
 	assert.equal(await h.fire("tool_call", write), undefined, "implement writes");
 	assert.equal(await h.fire("tool_call", readSkill("wayfinder")) === undefined, true, "an uncontracted skill is reachable");
+});
+
+// A project dir with a `.pi` marker, so the state file has somewhere to live.
+function project() {
+	const root = mkdtempSync(join(tmpdir(), "skill-guard-"));
+	mkdirSync(join(root, ".pi"));
+	return { cwd: root, sessionManager: { getSessionId: () => "session-1" } };
+}
+
+test("a reload keeps the phase the last session ended in", async () => {
+	const context = project();
+
+	const before = harness("ok", true, context);
+	await before.fire("session_start", {});
+	assert.equal(await before.fire("tool_call", readSkill("to-spec")), undefined);
+	assert.match(before.status(), /phase: to-spec/);
+
+	// The same session id and cwd is what `/reload` gives the fresh factory.
+	const after = harness("ok", true, context);
+	await after.fire("session_start", {});
+	assert.match(after.status(), /phase: to-spec/, "the guard does not start cold after a reload");
+	assert.equal((await after.fire("tool_call", write)) === undefined, false, "and to-spec still refuses writes");
+});
+
+test("/matt reports the restored phase and moves it", async () => {
+	const h = harness("ok", true, project());
+	await h.fire("session_start", {});
+	await h.fire("tool_call", readSkill("to-tickets"));
+	await h.command("matt", "");
+	assert.match(h.notice(), /фаза: to-tickets/);
+
+	await h.command("matt", "goto research");
+	assert.match(h.notice(), /не фаза/);
+	assert.match(h.status(), /phase: to-tickets/, "a skill without a contract arms nothing");
+
+	await h.command("matt", "goto implement-spec");
+	assert.match(h.status(), /phase: implement-spec/);
+	assert.equal(await h.fire("tool_call", write), undefined, "the phase it moved to grants writes");
 });

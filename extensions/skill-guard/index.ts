@@ -9,12 +9,16 @@
  * but it does not lift or change the open phase either; and headless runs (json/print
  * modes have no dialog, so the gate degrades to a notification instead of deadlocking).
  *
- * shortcut: the phase lives in memory only, so /reload or a resumed session starts
- * unguarded until the next SKILL.md read. Persist it if that turns out to hurt.
+ * shortcut: a skill without a contract is still not a phase, and headless runs have no
+ * dialog to ask a gate in.
+ *
+ * The phase is saved to `.pi/skills-guard/sessions/<sessionId>.json` so `/reload` and a
+ * resumed session keep it; `/matt` shows it and `/matt goto` moves it.
  */
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { CONTRACTS, SUB_SKILLS } from "./contracts.ts";
 import { contractOf, decide, needsGate, needsPermission, skillNameFromPath, type GuardState } from "./engine.ts";
+import { findRoot, readState, statePath, writeState } from "./state.ts";
 
 export default function (pi: ExtensionAPI): void {
 	const state: GuardState = { phase: null, gatesPassed: [] };
@@ -22,6 +26,27 @@ export default function (pi: ExtensionAPI): void {
 	const allowed = new Set<string>();
 	/** The last answer that closed a phase: history for the next one, never the current one's own. */
 	let lastClosure: { phase: string; answer: string } | null = null;
+	/** Where this session's phase is saved; null when the run has no cwd (headless, tests). */
+	let sessionFile: string | null = null;
+
+	const fileFor = (ctx: unknown): string | null => {
+		const c = ctx as { cwd?: string; sessionManager?: { getSessionId?: () => string } };
+		const id = c.sessionManager?.getSessionId?.();
+		const root = c.cwd ? findRoot(c.cwd) : null;
+		return id && root ? statePath(root, id) : null;
+	};
+
+	// A failed write costs the next reload's restoration, not the running session.
+	let saveError: string | null = null;
+	const persist = () => {
+		if (!sessionFile) return;
+		try {
+			writeState(sessionFile, state);
+			saveError = null;
+		} catch (error) {
+			saveError = error instanceof Error ? error.message : String(error);
+		}
+	};
 
 	const showPhase = (ui: { setStatus: (key: string, text: string | undefined) => void }) => {
 		const c = contractOf(CONTRACTS, state.phase);
@@ -42,8 +67,29 @@ export default function (pi: ExtensionAPI): void {
 		lastClosure = null;
 	};
 
+	/** What `/matt` shows: the phase, what it allows, and what still has to be closed. */
+	const report = () => {
+		const c = contractOf(CONTRACTS, state.phase);
+		if (!c) return "skill-guard: фаза не открыта";
+		const gate = needsGate(CONTRACTS, state);
+		return [
+			`фаза: ${c.name}`,
+			`разрешено: ${c.grants.join(", ")}`,
+			`дальше: ${c.successors.join(", ") || "—"}`,
+			gate ? `открытый гейт: ${gate.question}` : "гейт: закрыт",
+			saveError ? `состояние НЕ сохранено: ${saveError}` : `состояние: ${sessionFile ?? "некуда сохранять"}`,
+		].join("\n");
+	};
+
 	pi.on("session_start", (_event, ctx) => {
+		sessionFile = fileFor(ctx);
 		reset();
+		// A restored phase is the whole point of the file: without it a reload drops the guard.
+		const saved = sessionFile ? readState(sessionFile) : null;
+		if (saved) {
+			state.phase = saved.phase;
+			state.gatesPassed = saved.gatesPassed;
+		}
 		showPhase(ctx.ui);
 	});
 
@@ -60,6 +106,8 @@ export default function (pi: ExtensionAPI): void {
 		state.gatesPassed = [];
 		allowed.clear();
 		lastClosure = null;
+		sessionFile ??= fileFor(ctx);
+		persist();
 		showPhase(ctx.ui);
 	});
 
@@ -93,6 +141,7 @@ export default function (pi: ExtensionAPI): void {
 					}
 					state.gatesPassed.push(state.phase);
 					lastClosure = { phase: state.phase, answer: answer.trim() };
+					persist();
 					ctx.ui.notify(`skill-guard: ответ записан → ${name}`, "info");
 				}
 			}
@@ -103,6 +152,8 @@ export default function (pi: ExtensionAPI): void {
 				state.gatesPassed = state.gatesPassed.filter((p) => p !== decision.phase);
 			}
 			state.phase = decision.phase;
+			sessionFile ??= fileFor(ctx);
+			persist();
 			showPhase(ctx.ui);
 			return;
 		}
@@ -134,5 +185,31 @@ export default function (pi: ExtensionAPI): void {
 
 		const decision = decide(state, { kind: "tool", tool: event.toolName }, CONTRACTS);
 		if (!decision.allow) return { block: true, reason: decision.reason };
+	});
+
+	// `/matt` is the only way back that does not need the model's cooperation.
+	pi.registerCommand("matt", {
+		description: "skill-guard: фаза, гейты; /matt goto <skill>",
+		handler: async (args, ctx) => {
+			sessionFile ??= fileFor(ctx);
+			const goto = /^goto\s+([\w-]+)$/.exec(args.trim());
+			if (!goto) {
+				ctx.ui.notify(report(), "info");
+				return;
+			}
+			const name = goto[1];
+			// Only a contract makes a phase: `research` or a typo would arm nothing.
+			if (!contractOf(CONTRACTS, name)) {
+				ctx.ui.notify(`/matt goto: «${name}» — не фаза (нет контракта)`, "warning");
+				return;
+			}
+			state.phase = name;
+			state.gatesPassed = [];
+			allowed.clear();
+			lastClosure = null;
+			persist();
+			showPhase(ctx.ui);
+			ctx.ui.notify(`skill-guard: фаза → ${name}`, "info");
+		},
 	});
 }
