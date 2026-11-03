@@ -229,5 +229,43 @@ test("/matt reports the restored phase and moves it", async () => {
 
 	await h.command("matt", "goto implement-spec");
 	assert.match(h.status(), /phase: implement-spec/);
+	assert.equal(((await h.fire("tool_call", write)) as { block?: boolean }).block, true, "implement-spec needs a spec first");
+	await h.command("matt", "spec #42");
+	assert.match(h.notice(), /#42/);
 	assert.equal(await h.fire("tool_call", write), undefined, "the phase it moved to grants writes");
+});
+
+test("entering implement-spec asks for the spec, and no answer cancels the move", async () => {
+	const cancelled = harness("");
+	const result = (await cancelled.fire("tool_call", readSkill("implement-spec"))) as { block?: boolean; reason?: string };
+	assert.equal(result.block, true);
+	assert.match(result.reason ?? "", /спек/);
+	assert.equal(cancelled.asked(), 1, "asked exactly once, at the move");
+
+	const named = harness("#42");
+	assert.equal(await named.fire("tool_call", readSkill("implement-spec")), undefined, "a named spec lets the move through");
+	assert.equal(named.asked(), 1);
+	assert.match(named.status(), /phase: implement-spec/);
+	assert.equal(await named.fire("tool_call", write), undefined, "and the phase can write");
+});
+
+test("the spec is asked once per session, not on every read", async () => {
+	const h = harness("#42");
+	await h.fire("tool_call", readSkill("implement-spec"));
+	await h.fire("tool_call", readSkill("implement-spec"));
+	assert.equal(h.asked(), 1, "the spec is already named");
+});
+
+test("the spec survives a reload with the phase", async () => {
+	const context = project();
+	const before = harness("#42", true, context);
+	await before.fire("session_start", {});
+	await before.fire("tool_call", readSkill("implement-spec"));
+
+	// A reload asks nothing new: the spec came back from the file.
+	const after = harness("", true, context);
+	await after.fire("session_start", {});
+	assert.match(after.status(), /phase: implement-spec/);
+	assert.equal(await after.fire("tool_call", write), undefined, "no spec dialog after a reload");
+	assert.equal(after.asked(), 0);
 });

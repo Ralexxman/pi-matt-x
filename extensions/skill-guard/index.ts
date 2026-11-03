@@ -63,6 +63,7 @@ export default function (pi: ExtensionAPI): void {
 	const reset = () => {
 		state.phase = null;
 		state.gatesPassed = [];
+		delete state.spec;
 		allowed.clear();
 		lastClosure = null;
 	};
@@ -74,6 +75,7 @@ export default function (pi: ExtensionAPI): void {
 		const gate = needsGate(CONTRACTS, state);
 		return [
 			`фаза: ${c.name}`,
+			...(c.needsSpec || state.spec ? [`спека: ${state.spec?.ref ?? "не названа"}`] : []),
 			`разрешено: ${c.grants.join(", ")}`,
 			`дальше: ${c.successors.join(", ") || "—"}`,
 			gate ? `открытый гейт: ${gate.question}` : "гейт: закрыт",
@@ -89,6 +91,7 @@ export default function (pi: ExtensionAPI): void {
 		if (saved) {
 			state.phase = saved.phase;
 			state.gatesPassed = saved.gatesPassed;
+			if (saved.spec) state.spec = saved.spec;
 		}
 		showPhase(ctx.ui);
 	});
@@ -146,6 +149,27 @@ export default function (pi: ExtensionAPI): void {
 				}
 			}
 
+			// A phase that works on a spec has nothing to work on without one, and only the
+			// user knows which spec this run is about — asked once, at the move.
+			const entering = contractOf(CONTRACTS, decision.phase);
+			if (entering?.needsSpec && !state.spec?.ref) {
+				if (!ctx.hasUI) {
+					ctx.ui.notify(`skill-guard: фаза «${entering.name}» без спеки — /matt spec <#issue|путь>`, "warning");
+				} else {
+					const ref = await ctx.ui.editor("На какую спеку работаем? #issue или путь", "");
+					if (ref === undefined || ref.trim() === "") {
+						return {
+							block: true,
+							reason:
+								`Фаза «${entering.name}» работает по спеке, а спека не названа — переход отменён.\n` +
+								`Назови её: /matt spec <#issue|путь>, потом прочитай SKILL.md снова.`,
+						};
+					}
+					state.spec = { ref: ref.trim() };
+					ctx.ui.notify(`skill-guard: спека → ${state.spec.ref}`, "info");
+				}
+			}
+
 			if (decision.phase !== state.phase) {
 				allowed.clear();
 				// A phase entered again is a new visit: the answer that closed the last one is spent.
@@ -189,9 +213,16 @@ export default function (pi: ExtensionAPI): void {
 
 	// `/matt` is the only way back that does not need the model's cooperation.
 	pi.registerCommand("matt", {
-		description: "skill-guard: фаза, гейты; /matt goto <skill>",
+		description: "skill-guard: фаза, гейты; /matt goto <skill>; /matt spec <#issue|путь>",
 		handler: async (args, ctx) => {
 			sessionFile ??= fileFor(ctx);
+			const spec = /^spec\s+(.+)$/.exec(args.trim());
+			if (spec) {
+				state.spec = { ref: spec[1].trim() };
+				persist();
+				ctx.ui.notify(`skill-guard: спека → ${state.spec.ref}`, "info");
+				return;
+			}
 			const goto = /^goto\s+([\w-]+)$/.exec(args.trim());
 			if (!goto) {
 				ctx.ui.notify(report(), "info");

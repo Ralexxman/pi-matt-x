@@ -27,6 +27,11 @@ export interface Contract {
 	/** Skills the flow may move to from here. */
 	successors: string[];
 	/**
+	 * The phase works on an external object (a spec), so entering it asks for the spec and
+	 * no file changes until the user names one.
+	 */
+	needsSpec?: boolean;
+	/**
 	 * End condition of the phase, asked of the user before moving on. `quote` is the
 	 * skill's own wording of what "done" means, shown as evidence; `source` names the
 	 * skill whose SKILL.md holds that wording when it is not this one.
@@ -99,6 +104,8 @@ export const CONTRACTS: readonly Contract[] = [
 	{
 		name: "implement-spec",
 		grants: ["read", "write", "bash"],
+		// Nine steps against one spec: without the spec there is nothing to close.
+		needsSpec: true,
 		successors: ["tdd", "code-review", "diagnosing-bugs", "retro", "pr", "handoff"],
 	},
 	{

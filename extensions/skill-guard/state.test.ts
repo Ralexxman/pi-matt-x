@@ -38,6 +38,19 @@ test("a stray gatesPassed value does not reach the state", () => {
 	assert.deepEqual(readState(path), { phase: "grilling", gatesPassed: ["ok"] });
 });
 
+test("the spec survives a reload with the phase", () => {
+	const path = statePath(tempRoot(), "spec");
+	writeState(path, { phase: "implement-spec", gatesPassed: [], spec: { ref: "#42" } });
+	assert.deepEqual(readState(path), { phase: "implement-spec", gatesPassed: [], spec: { ref: "#42" } });
+});
+
+test("a spec without a ref is not a spec", () => {
+	const dir = tempRoot();
+	const path = writeRaw(dir, "noref", JSON.stringify({ phase: "implement-spec", gatesPassed: [], spec: { ref: 5 } }));
+	// no spec means the phase cannot change files — which is the safe side of a bad file
+	assert.deepEqual(readState(path), { phase: "implement-spec", gatesPassed: [] });
+});
+
 test("the session id cannot walk out of the sessions directory", () => {
 	const path = statePath("/repo", "../../etc/passwd");
 	assert.equal(path, join("/repo", ".pi", "skills-guard", "sessions", ".._.._etc_passwd.json"));

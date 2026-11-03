@@ -8,6 +8,11 @@ export interface GuardState {
 	phase: string | null;
 	/** Phases whose end-condition question the user already answered yes. */
 	gatesPassed: string[];
+	/**
+	 * The spec the open phase works on. A phase whose contract asks for it cannot change
+	 * files without one: the work would have nowhere to land, and nothing to close.
+	 */
+	spec?: { ref: string; check?: string };
 }
 
 export type Request =
@@ -115,7 +120,16 @@ export function decide(state: GuardState, req: Request, contracts: readonly Cont
 	const grant = grantFor(req.tool);
 	if (grant === null) return { allow: true, phase: state.phase };
 	if (!c) return { allow: true, phase: state.phase };
-	if (c.grants.includes(grant)) return { allow: true, phase: state.phase };
+	if (c.grants.includes(grant)) {
+		// Reading is how the model finds out what the spec says; only a change needs an anchor.
+		if (c.needsSpec && grant !== "read" && !state.spec?.ref) {
+			return blocked(
+				`Фаза «${c.name}» работает по спеке, а спека не названа.` +
+					`\nНазови её: /matt spec <#issue|путь>.`,
+			);
+		}
+		return { allow: true, phase: state.phase };
+	}
 	return blocked(
 		`Фаза «${c.name}» разрешает только: ${c.grants.join(", ")}. Инструмент «${req.tool}» — нет.` +
 			`\nДальше отсюда: ${c.successors.join(", ")}.`,

@@ -36,9 +36,11 @@ export function readState(path: string): GuardState | null {
 	if (!raw || typeof raw !== "object") return null;
 	const saved = raw as Partial<GuardState>;
 	if (typeof saved.phase !== "string" || !saved.phase) return null;
+	const spec = saved.spec;
 	return {
 		phase: saved.phase,
 		gatesPassed: Array.isArray(saved.gatesPassed) ? saved.gatesPassed.filter((p): p is string => typeof p === "string") : [],
+		...(spec && typeof spec.ref === "string" && spec.ref ? { spec } : {}),
 	};
 }
 

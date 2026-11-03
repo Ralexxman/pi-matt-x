@@ -142,3 +142,26 @@ test("read-only tools of the installed extensions need no permission", () => {
 		assert.equal(needsPermission(at("grilling"), t, CONTRACTS), false, t);
 	}
 });
+
+test("implement-spec cannot change files before a spec is named", () => {
+	const d = decide(at("implement-spec"), tool("write"), CONTRACTS);
+	assert.equal(d.allow, false);
+	if (d.allow) return;
+	assert.match(d.reason, /спек/);
+	assert.match(d.reason, /\/matt spec/);
+	// bash writes too, so it is held to the same anchor
+	assert.equal(decide(at("implement-spec"), tool("bash"), CONTRACTS).allow, false);
+	// reading is how the model finds out what the spec says
+	assert.equal(decide(at("implement-spec"), tool("read"), CONTRACTS).allow, true);
+});
+
+test("a named spec lets implement-spec work", () => {
+	const withSpec: GuardState = { phase: "implement-spec", gatesPassed: [], spec: { ref: "#42" } };
+	assert.equal(decide(withSpec, tool("write"), CONTRACTS).allow, true);
+	assert.equal(decide(withSpec, tool("bash"), CONTRACTS).allow, true);
+});
+
+test("only a phase whose contract asks for a spec needs one", () => {
+	assert.equal(decide(at("implement"), tool("write"), CONTRACTS).allow, true);
+	assert.equal(CONTRACTS.filter((c) => c.needsSpec).length, 1);
+});
