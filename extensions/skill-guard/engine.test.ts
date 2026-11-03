@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { CONTRACTS } from "./contracts.ts";
-import { commandCloses, decide, gateText, grantFor, needsGate, needsPermission, phaseBlock, skillNameFromPath, specCheck, type GuardState } from "./engine.ts";
+import { commandCloses, decide, gateText, grantFor, needsGate, needsPermission, phaseBlock, skillNameFromPath, specCheck, trackerRead, type GuardState } from "./engine.ts";
 
 const at = (phase: string | null, gatesPassed: string[] = []): GuardState => ({ phase, gatesPassed });
 const tool = (name: string) => ({ kind: "tool" as const, tool: name });
@@ -223,4 +223,19 @@ test("a declared successor is a phase even before it has a contract of its own",
 	assert.deepEqual(decide(at("a"), skill("b"), bare), { allow: true, phase: "b" });
 	// A skill that is neither contracted nor declared still does not move the phase.
 	assert.deepEqual(decide(at("a"), skill("research"), bare), { allow: true, phase: "a" });
+});
+
+test("only a read of the tracker can prove a tracker state", () => {
+	assert.equal(trackerRead("gh issue list --state open -q length"), true);
+	assert.equal(trackerRead("gh issue view 1 --json state -q .state"), true);
+	assert.equal(trackerRead("  gh issue list --state open --json number -q 'length'"), true, "a quoted argument is still one command");
+
+	// A composite prints whatever it likes; a mutation is the model's own act.
+	assert.equal(trackerRead("gh issue list --state open; echo 0"), false);
+	assert.equal(trackerRead("gh issue list --state open && echo 0"), false);
+	assert.equal(trackerRead("echo 0 | gh issue list"), false);
+	assert.equal(trackerRead("gh issue view 1 > /dev/null"), false);
+	assert.equal(trackerRead("gh issue close 1"), false);
+	assert.equal(trackerRead("gh issue edit 1 --body x"), false);
+	assert.equal(trackerRead("printf 0"), false);
 });

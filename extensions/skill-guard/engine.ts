@@ -96,6 +96,17 @@ export function commandCloses(gate: Gate, isError: boolean, output: string): boo
 	return new RegExp(gate.must, "m").test(output);
 }
 
+/**
+ * Whether a shell command can prove a tracker state at all. Reading only: a composite
+ * command (`gh issue list; echo 0`) or a mutation (`gh issue close 1`) prints whatever it
+ * likes, so it proves nothing — the gate would close on the model's own act.
+ */
+export function trackerRead(command: string): boolean {
+	const c = command.trim();
+	if (/[;&|<>`]|\$\(|\n/.test(c)) return false;
+	return /^gh\s+(issue\s+(view|list)|api)\b/.test(c);
+}
+
 /** What a gate asks for, in one line: the question for a person, the check for a command. */
 export function gateText(gate: Gate): string {
 	return gate.kind === "user" ? gate.quote : gate.hint;

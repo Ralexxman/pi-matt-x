@@ -460,3 +460,19 @@ test("a closed gate ends the turn, and the ceiling stops a loop", async () => {
 	await stuck.fire("input", { text: "продолжай", source: "interactive" });
 	assert.equal(((await stuck.fire("agent_before_settle", {})) as Boundary).continue, true);
 });
+
+test("a composite or mutating command does not close the gate", async () => {
+	const h = harness("#42");
+	await h.fire("tool_call", readSkill("implement-spec"));
+
+	// Each of these prints a zero, and none of them is the tracker answering.
+	for (const command of ["gh issue list --state open; echo 0", "gh issue list --state open && echo 0", "gh issue close 1", "gh issue edit 1 --body x", "printf 0"]) {
+		await h.fire("tool_result", { toolName: "bash", input: { command }, content: [{ type: "text", text: "0\n" }], isError: false });
+		const move = (await h.fire("tool_call", readSkill("code-review"))) as { block?: boolean };
+		assert.equal(move.block, true, `${command} must not close the gate`);
+	}
+
+	// A read of the tracker does close it.
+	await h.fire("tool_result", { toolName: "bash", input: { command: "gh issue list --state open -q length" }, content: [{ type: "text", text: "0\n" }], isError: false });
+	assert.equal(await h.fire("tool_call", readSkill("code-review")), undefined);
+});
