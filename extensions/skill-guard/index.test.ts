@@ -5,7 +5,7 @@
  */
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
@@ -220,6 +220,62 @@ test("the ticket count comes back with the phase after a reload", async () => {
 	type Msg = { content: string };
 	const block = (await after.fire("context", { messages: [] })) as { messages: Msg[] };
 	assert.match(block.messages[0]?.content ?? "", /2 открытых тикетов/);
+});
+
+/** Runs `fn` with the environment a subagent process sees, then puts the environment back. */
+async function asChild<T>(fn: () => T): Promise<T> {
+	process.env.PI_SUBAGENT_CHILD = "1";
+	process.env.PI_SUBAGENT_PARENT_SESSION = "session-1";
+	try {
+		return await fn();
+	} finally {
+		delete process.env.PI_SUBAGENT_CHILD;
+		delete process.env.PI_SUBAGENT_PARENT_SESSION;
+	}
+}
+
+/** A parent already inside implement-spec with a spec, and the child that inherits it. */
+async function parentAndChild() {
+	const context = project();
+	const parent = harness("#42", true, context);
+	await parent.fire("session_start", {});
+	await parent.fire("tool_call", readSkill("implement-spec"));
+	const child = await asChild(() => harness("#42", true, { ...context, sessionManager: { getSessionId: () => "child-1" } }));
+	await child.fire("session_start", {});
+	return { context, parent, child };
+}
+
+test("a subagent starts in the phase its parent left open", async () => {
+	const { child } = await parentAndChild();
+	assert.match(child.status(), /phase: implement-spec/, "no cold start without a guard");
+});
+
+test("a subagent cannot move the parent's phase", async () => {
+	const { child } = await parentAndChild();
+
+	// The control panel belongs to the parent: a child may look at the phase, not move it.
+	await child.command("matt", "goto pr");
+	assert.match(child.notice(), /унаследована/);
+	assert.match(child.status(), /phase: implement-spec/);
+
+	// Nor by naming a phase in the prompt.
+	await child.fire("input", { text: "/skill:pr", source: "interactive" });
+	assert.match(child.status(), /phase: implement-spec/);
+
+	// Nor by reading another phase's SKILL.md.
+	const move = (await child.fire("tool_call", readSkill("code-review"))) as { block?: boolean; reason?: string };
+	assert.equal(move.block, true);
+	assert.match(move.reason ?? "", /принадлежит родительской сессии/);
+});
+
+test("a subagent does not close the parent's gate, and writes no file of its own", async () => {
+	const { context, parent, child } = await parentAndChild();
+	await child.fire("tool_result", { toolName: "bash", input: GH_COUNT, content: [{ type: "text", text: "0\n" }], isError: false });
+
+	type Msg = { content: string };
+	const gate = (await parent.fire("context", { messages: [] })) as { messages: Msg[] };
+	assert.match(gate.messages[0]?.content ?? "", /гейт открыт/, "the parent still has work to close");
+	assert.equal(existsSync(join(String(context.cwd), ".pi", "skills-guard", "sessions", "child-1.json")), false, "a child writes no state file");
 });
 
 test("a reload keeps the phase the last session ended in", async () => {

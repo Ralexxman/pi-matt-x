@@ -31,6 +31,12 @@ export default function (pi: ExtensionAPI): void {
 	/** Auto-continuations asked for in this user turn: the ceiling that keeps a loop from spinning. */
 	let continues = 0;
 	const MAX_CONTINUES = 3;
+	/**
+	 * A subagent is a separate process with its own session id: its phase is the parent's,
+	 * read from the parent's file. It may use that phase's capabilities and may not move the
+	 * phase or close a gate — two processes writing one file would fight over the same state.
+	 */
+	const inherited = process.env.PI_SUBAGENT_CHILD === "1" ? (process.env.PI_SUBAGENT_PARENT_SESSION ?? "") : "";
 
 	const fileFor = (ctx: unknown): string | null => {
 		const c = ctx as { cwd?: string; sessionManager?: { getSessionId?: () => string } };
@@ -63,12 +69,20 @@ export default function (pi: ExtensionAPI): void {
 		);
 	};
 
+	/** Where a subagent reads the phase from: the parent's file, never its own. */
+	const parentFile = (ctx: unknown): string | null => {
+		const c = ctx as { cwd?: string };
+		const root = c.cwd ? findRoot(c.cwd) : null;
+		return inherited && root ? statePath(root, inherited) : null;
+	};
+
 	/**
 	 * Every state change ends here: the file learns about it and so does the status line. One
 	 * call instead of the same three in every handler, and the file is found here, once.
 	 */
 	const commit = (ctx: unknown) => {
-		sessionFile ??= fileFor(ctx);
+		// A child has no file of its own: it inherited the parent's phase to use, not to write.
+		if (!inherited) sessionFile ??= fileFor(ctx);
 		persist();
 		showPhase((ctx as { ui: { setStatus: (key: string, text: string | undefined) => void } }).ui);
 	};
@@ -98,13 +112,17 @@ export default function (pi: ExtensionAPI): void {
 	};
 
 	pi.on("session_start", (_event, ctx) => {
-		sessionFile = fileFor(ctx);
+		// In a child the file belongs to the parent and is read-only: this process must not
+		// write into another session's state, so it has nowhere to save and needs no place.
+		const parent = parentFile(ctx);
+		sessionFile = parent ? null : fileFor(ctx);
 		reset();
 		// A restored phase is the whole point of the file: without it a reload drops the guard.
 		// Everything the file holds comes back. A field the restore lists by hand is a field
 		// it can forget — `tickets` was exactly that: after every reload the block said
 		// «неизвестно», and the count had to be earned again by running the check.
-		const saved = sessionFile ? readState(sessionFile) : null;
+		const source = parent ?? sessionFile;
+		const saved = source ? readState(source) : null;
 		if (saved) Object.assign(state, saved);
 		commit(ctx);
 	});
@@ -115,6 +133,9 @@ export default function (pi: ExtensionAPI): void {
 	pi.on("input", (event, ctx) => {
 		// A new user turn starts with its own budget of continuations.
 		continues = 0;
+		// The child's phase belongs to the parent: naming one here would move it locally and
+		// look like a flow step that never happened.
+		if (inherited) return;
 		const m = /^\/skill:([\w-]+)/.exec(event.text.trim());
 		const name = m?.[1];
 		// A typo, or a skill outside the flow, must not look armed: only a contract makes a
@@ -138,6 +159,15 @@ export default function (pi: ExtensionAPI): void {
 
 			const decision = decide(state, { kind: "skill", name }, CONTRACTS);
 			if (!decision.allow) return { block: true, reason: decision.reason };
+
+			// The child works inside the parent's phase and does not leave it: a subagent does one
+			// slice, and its exit is not the flow's exit. Uncontracted skills stay readable.
+			if (inherited && contractOf(CONTRACTS, name) && name !== state.phase) {
+				return {
+					block: true,
+					reason: `Фаза «${state.phase}» принадлежит родительской сессии: сабагент её не меняет.`,
+				};
+			}
 
 			// Leaving the current phase costs one question, asked here because this is
 			// the moment the flow moves on and the model cannot answer it itself.
@@ -236,6 +266,8 @@ export default function (pi: ExtensionAPI): void {
 	// The one gate a person does not have to answer: the runner already did. A command gate
 	// closes on the tool's own output, so the model cannot close it by claiming it is done.
 	pi.on("tool_result", (event, ctx) => {
+		// The parent owns its gates: a child reporting a closed spec would close them for it.
+		if (inherited) return;
 		// Only a command can prove a tracker state; an edit or a read proves nothing.
 		if (grantFor(event.toolName) !== "bash") return;
 		// And only the tracker's own command: `printf 0` would close the gate just as well.
@@ -311,7 +343,13 @@ export default function (pi: ExtensionAPI): void {
 				.map((word) => ({ value: word, label: word.trim(), description: word === "goto " ? "сменить фазу" : "назвать спеку" }));
 		},
 		handler: async (args, ctx) => {
-			sessionFile ??= fileFor(ctx);
+			// `/matt` is the parent's control panel: a child may look at the phase and not move
+			// it, because its own session ends with its answer.
+			if (inherited && /^(goto|spec)\s/.test(args.trim())) {
+				ctx.ui.notify("skill-guard: фаза унаследована от родителя — /matt goto и /matt spec здесь не работают", "warning");
+				return;
+			}
+			if (!inherited) sessionFile ??= fileFor(ctx);
 			const spec = /^spec\s+(.+)$/.exec(args.trim());
 			if (spec) {
 				state.spec = { ref: spec[1].trim() };
