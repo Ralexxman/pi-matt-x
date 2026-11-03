@@ -41,6 +41,9 @@ export function readState(path: string): GuardState | null {
 		phase: saved.phase,
 		gatesPassed: Array.isArray(saved.gatesPassed) ? saved.gatesPassed.filter((p): p is string => typeof p === "string") : [],
 		...(spec && typeof spec.ref === "string" && spec.ref ? { spec } : {}),
+		...(typeof saved.tickets === "number" && Number.isInteger(saved.tickets) && saved.tickets >= 0
+			? { tickets: saved.tickets }
+			: {}),
 	};
 }
 

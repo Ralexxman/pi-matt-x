@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { CONTRACTS } from "./contracts.ts";
-import { commandCloses, decide, gateText, grantFor, needsGate, needsPermission, skillNameFromPath, specCheck, type GuardState } from "./engine.ts";
+import { commandCloses, decide, gateText, grantFor, needsGate, needsPermission, phaseBlock, skillNameFromPath, specCheck, type GuardState } from "./engine.ts";
 
 const at = (phase: string | null, gatesPassed: string[] = []): GuardState => ({ phase, gatesPassed });
 const tool = (name: string) => ({ kind: "tool" as const, tool: name });
@@ -189,4 +189,19 @@ test("the check command is derived from an issue anchor only", () => {
 	assert.equal(specCheck("#42"), "gh issue view 42 --json state -q .state");
 	assert.equal(specCheck("42"), "gh issue view 42 --json state -q .state");
 	assert.equal(specCheck(".scratch/feat/"), undefined, "a path has no tracker state");
+});
+
+test("the phase block says what has to survive a compaction", () => {
+	assert.equal(phaseBlock(CONTRACTS, at(null)), null, "no phase, no block");
+
+	const block = phaseBlock(CONTRACTS, { phase: "implement-spec", gatesPassed: [], spec: { ref: "#42" }, tickets: 3 }) ?? "";
+	assert.match(block, /фаза: implement-spec/);
+	assert.match(block, /спека: #42/);
+	assert.match(block, /3 открытых тикетов/);
+	assert.match(block, /gh issue view 42/);
+	assert.match(block, /code-review/);
+
+	const closed = phaseBlock(CONTRACTS, { phase: "implement-spec", gatesPassed: ["implement-spec"], spec: { ref: "#42" } }) ?? "";
+	assert.match(closed, /гейт закрыт/);
+	assert.match(closed, /осталось: неизвестно/);
 });

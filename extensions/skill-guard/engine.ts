@@ -13,6 +13,8 @@ export interface GuardState {
 	 * files without one: the work would have nowhere to land, and nothing to close.
 	 */
 	spec?: { ref: string };
+	/** Open tickets the tracker last reported, so the block can say how much is left. */
+	tickets?: number;
 }
 
 export type Request =
@@ -106,6 +108,28 @@ export function gateText(gate: Gate): string {
 export function specCheck(ref: string): string | undefined {
 	const issue = /^#?(\d+)$/.exec(ref.trim());
 	return issue ? `gh issue view ${issue[1]} --json state -q .state` : undefined;
+}
+
+/**
+ * What the model has to still see after a compaction: the phase, its spec, how much is left
+ * and the next step. Built fresh on every request, because a message written once lands
+ * behind the compaction point and is gone.
+ */
+export function phaseBlock(contracts: readonly Contract[], state: GuardState): string | null {
+	const c = contractOf(contracts, state.phase);
+	if (!c) return null;
+	const gate = needsGate(contracts, state);
+	const check = state.spec ? specCheck(state.spec.ref) : undefined;
+	const left = state.tickets === undefined ? "неизвестно — прогони проверку" : `${state.tickets} открытых тикетов`;
+	let closing = "гейт закрыт";
+	if (gate?.kind === "user") closing = `гейт открыт: ${gate.question}`;
+	if (gate?.kind === "command") closing = `гейт открыт: ${gate.hint}${check ? ` — ${check}` : ""}`;
+	return [
+		`[skill-guard] фаза: ${c.name}${state.spec ? ` · спека: ${state.spec.ref}` : ""}`,
+		`осталось: ${left}`,
+		closing,
+		`следующий шаг: ${c.successors.join(" | ") || "—"}`,
+	].join("\n");
 }
 
 /**

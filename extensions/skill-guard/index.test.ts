@@ -304,3 +304,31 @@ test("/matt shows the command gate as a check to run, with the command", async (
 	assert.match(h.notice(), /проверку/);
 	assert.match(h.status(), /phase: implement-spec/);
 });
+
+test("every request carries the phase block, exactly once", async () => {
+	const h = harness("#42");
+	assert.equal(await h.fire("context", { messages: [] }), undefined, "no phase, no block");
+
+	await h.fire("tool_call", readSkill("implement-spec"));
+	type Msg = { customType?: string; content: string };
+	const first = (await h.fire("context", { messages: [{ role: "user", content: "x" }] })) as { messages: Msg[] };
+	assert.equal(first.messages.length, 2);
+	assert.equal(first.messages.filter((m) => m.customType === "skill-guard").length, 1, "not once per handler");
+	assert.match(first.messages[1]?.content ?? "", /фаза: implement-spec/);
+
+	// The same state gives the same text, so only the tail of the prompt changes.
+	const second = (await h.fire("context", { messages: [] })) as { messages: Msg[] };
+	assert.equal(second.messages[0]?.content, first.messages[1]?.content);
+});
+
+test("the tracker's count reaches the block, and no count is not a zero", async () => {
+	const h = harness("#42");
+	await h.fire("tool_call", readSkill("implement-spec"));
+	type Msg = { content: string };
+	const before = (await h.fire("context", { messages: [] })) as { messages: Msg[] };
+	assert.match(before.messages[0]?.content ?? "", /осталось: неизвестно/);
+
+	await h.fire("tool_result", { toolName: "bash", input: {}, content: [{ type: "text", text: "3\n" }], isError: false });
+	const after = (await h.fire("context", { messages: [] })) as { messages: Msg[] };
+	assert.match(after.messages[0]?.content ?? "", /3 открытых тикетов/);
+});

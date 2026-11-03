@@ -17,7 +17,7 @@
  */
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { CONTRACTS, SUB_SKILLS } from "./contracts.ts";
-import { contractOf, decide, commandCloses, gateText, grantFor, needsGate, needsPermission, skillNameFromPath, specCheck, type GuardState } from "./engine.ts";
+import { contractOf, decide, commandCloses, gateText, grantFor, needsGate, needsPermission, phaseBlock, skillNameFromPath, specCheck, type GuardState } from "./engine.ts";
 import { findRoot, readState, statePath, writeState } from "./state.ts";
 
 export default function (pi: ExtensionAPI): void {
@@ -225,18 +225,41 @@ export default function (pi: ExtensionAPI): void {
 	// The one gate a person does not have to answer: the runner already did. A command gate
 	// closes on the tool's own output, so the model cannot close it by claiming it is done.
 	pi.on("tool_result", (event, ctx) => {
-		const c = contractOf(CONTRACTS, state.phase);
-		const gate = needsGate(CONTRACTS, state);
-		if (!c || !gate || gate.kind !== "command") return;
 		// Only a command can prove a tracker state; an edit or a read proves nothing.
 		if (grantFor(event.toolName) !== "bash") return;
 		const output = event.content.map((part) => (part.type === "text" ? part.text : "")).join("\n");
+
+		// The tracker's last answer is the one number worth carrying past a compaction.
+		if (!event.isError && state.spec) {
+			const left = /^\s*(\d+)\s*$/m.exec(output);
+			if (left) {
+				state.tickets = Number(left[1]);
+				persist();
+			}
+		}
+
+		const c = contractOf(CONTRACTS, state.phase);
+		const gate = needsGate(CONTRACTS, state);
+		if (!c || !gate || gate.kind !== "command") return;
 		if (!commandCloses(gate, event.isError, output)) return;
 		state.gatesPassed.push(c.name);
 		lastClosure = { phase: c.name, answer: new RegExp(gate.must, "m").exec(output)?.[0] ?? "—" };
 		persist();
 		showPhase(ctx.ui);
 		ctx.ui.notify(`skill-guard: фаза «${c.name}» закрыта данными трекера`, "info");
+	});
+
+	// setStatus is invisible to the model, and a message written once is swallowed by the next
+	// compaction: the block is rebuilt on every request, at the tail of the conversation.
+	pi.on("context", (event) => {
+		const block = phaseBlock(CONTRACTS, state);
+		if (!block) return;
+		return {
+			messages: [
+				...event.messages,
+				{ role: "custom", customType: "skill-guard", content: block, display: false, timestamp: Date.now() },
+			],
+		};
 	});
 
 	// `/matt` is the only way back that does not need the model's cooperation.
