@@ -230,6 +230,11 @@ test("only a read of the tracker can prove a tracker state", () => {
 	assert.equal(trackerRead("gh issue view 1 --json state -q .state"), true);
 	assert.equal(trackerRead("  gh issue list --state open --json number -q 'length'"), true, "a quoted argument is still one command");
 
+	// `gh api` takes `-X PATCH … -f state=closed`: one command would close the ticket and then
+	// print the marker the gate waits for. It is not a read of the tracker.
+	assert.equal(trackerRead("gh api repos/o/r/issues/1"), false);
+	assert.equal(trackerRead("gh api -X PATCH repos/o/r/issues/1 -f state=closed -q .state"), false);
+
 	// A composite prints whatever it likes; a mutation is the model's own act.
 	assert.equal(trackerRead("gh issue list --state open; echo 0"), false);
 	assert.equal(trackerRead("gh issue list --state open && echo 0"), false);

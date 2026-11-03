@@ -36,7 +36,10 @@ export default function (pi: ExtensionAPI): void {
 	 * read from the parent's file. It may use that phase's capabilities and may not move the
 	 * phase or close a gate — two processes writing one file would fight over the same state.
 	 */
-	const inherited = process.env.PI_SUBAGENT_CHILD === "1" ? (process.env.PI_SUBAGENT_PARENT_SESSION ?? "") : "";
+	const isChild = process.env.PI_SUBAGENT_CHILD === "1";
+	const inherited = isChild ? (process.env.PI_SUBAGENT_PARENT_SESSION ?? "") : "";
+	/** A child whose parent's phase could not be read: it has nothing to inherit, so it stops. */
+	let orphan = false;
 
 	const fileFor = (ctx: unknown): string | null => {
 		const c = ctx as { cwd?: string; sessionManager?: { getSessionId?: () => string } };
@@ -82,7 +85,7 @@ export default function (pi: ExtensionAPI): void {
 	 */
 	const commit = (ctx: unknown) => {
 		// A child has no file of its own: it inherited the parent's phase to use, not to write.
-		if (!inherited) sessionFile ??= fileFor(ctx);
+		if (!isChild) sessionFile ??= fileFor(ctx);
 		persist();
 		showPhase((ctx as { ui: { setStatus: (key: string, text: string | undefined) => void } }).ui);
 	};
@@ -115,7 +118,7 @@ export default function (pi: ExtensionAPI): void {
 		// In a child the file belongs to the parent and is read-only: this process must not
 		// write into another session's state, so it has nowhere to save and needs no place.
 		const parent = parentFile(ctx);
-		sessionFile = parent ? null : fileFor(ctx);
+		sessionFile = parent ? null : isChild ? null : fileFor(ctx);
 		reset();
 		// A restored phase is the whole point of the file: without it a reload drops the guard.
 		// Everything the file holds comes back. A field the restore lists by hand is a field
@@ -124,6 +127,9 @@ export default function (pi: ExtensionAPI): void {
 		const source = parent ?? sessionFile;
 		const saved = source ? readState(source) : null;
 		if (saved) Object.assign(state, saved);
+		// A child that cannot find the parent's phase has no rules to inherit, and starting cold
+		// is exactly what this extension exists to prevent: it refuses instead of running free.
+		orphan = isChild && !saved;
 		commit(ctx);
 	});
 
@@ -150,6 +156,15 @@ export default function (pi: ExtensionAPI): void {
 
 	pi.on("tool_call", async (event, ctx) => {
 		const input = (event as { input?: Record<string, unknown> }).input ?? {};
+
+		// No inherited phase, no rules: a subagent that cannot read the parent's file stops
+		// rather than working unguarded.
+		if (orphan) {
+			return {
+				block: true,
+				reason: "Сабагент не нашёл фазу родителя (PI_SUBAGENT_PARENT_SESSION) — работать без неё нельзя.",
+			};
+		}
 
 		// Entering a phase: the model reads that phase's SKILL.md. A `/skill:<name>` mention
 		// is not a path and is handled in the `input` handler above.
@@ -348,6 +363,10 @@ export default function (pi: ExtensionAPI): void {
 			// it, because its own session ends with its answer.
 			if (inherited && /^(goto|spec)\s/.test(args.trim())) {
 				ctx.ui.notify("skill-guard: фаза унаследована от родителя — /matt goto и /matt spec здесь не работают", "warning");
+				return;
+			}
+			if (orphan) {
+				ctx.ui.notify("skill-guard: фаза родителя недоступна — /matt ничего не знает об этом процессе", "warning");
 				return;
 			}
 			if (!inherited) sessionFile ??= fileFor(ctx);

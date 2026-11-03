@@ -104,7 +104,10 @@ export function commandCloses(gate: Gate, isError: boolean, output: string): boo
 export function trackerRead(command: string): boolean {
 	const c = command.trim();
 	if (/[;&|<>`]|\$\(|\n/.test(c)) return false;
-	return /^gh\s+(issue\s+(view|list)|api)\b/.test(c);
+	// `gh api` is deliberately absent: it takes `-X PATCH … -f state=closed`, so one command
+	// would close the ticket and then print the marker the gate waits for. `gh issue view`
+	// and `gh issue list` cannot write.
+	return /^gh\s+issue\s+(view|list)\b/.test(c);
 }
 
 /** What a gate asks for, in one line: the question for a person, the check for a command. */

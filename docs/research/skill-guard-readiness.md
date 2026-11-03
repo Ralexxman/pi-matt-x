@@ -30,7 +30,7 @@
 5. `to-tickets` (`contracts.ts:103`): цитата `"Each slice is sized to fit in a single fresh context window"` точно совпадает с `~/.agents/skills/to-tickets/SKILL.md:33`.
 6. Остальные контракты (`implement`, `tdd`, `code-review`, `diagnosing-bugs`, `prototype`) пользовательских гейтов не имеют; `implement-spec` использует машинный `command`-гейт без цитаты (`contracts.ts:121-125`).
 
-Текстовый дрейф отсутствует: 3 уникальные цитаты совпадают посимвольно (`contracts.test.ts:27-38`).
+Текстовый дрейф отсутствует: 8 пользовательских гейтов содержат 6 уникальных цитат (одна цитата `grilling` служит трём контрактам), и все они совпадают посимвольно (`contracts.test.ts:27-38`).
 
 ---
 
@@ -43,31 +43,26 @@
 | **Чтение неконтрактного скилла** | `engine.ts:133`, `index.ts:173` | Принято явно | Скилл без контракта доступен для чтения отовсюду, но не меняет текущую фазу (`decide` возвращает `phase: state.phase`). Ограничения открытой фазы сохраняются (`docs/adr/0005-ask-when-unknown.md:16-17`, `index.ts:9-12`). |
 | **Неизвестный инструмент** | `engine.ts:120-124`, `index.ts:205-224` | Принято явно | Если фаза разрешает `bash`, неизвестный инструмент пропускается без вопросов (`engine.ts:122`, `docs/adr/0005-ask-when-unknown.md:21-22`). В фазах без `bash` запрашивается `ui.confirm`, а в headless — блокируется (`index.ts:210-215`). |
 | **Субагенты `PI_SUBAGENT_CHILD`** | `parentFile()`, `session_start`, `tool_call`, `tool_result`, `/matt` в `index.ts` | **Закрыто (cf91d2b)** | При `PI_SUBAGENT_CHILD=1` и `PI_SUBAGENT_PARENT_SESSION=<id>` ребёнок читает файл родителя и не пишет своего: `commit()` не вычисляет файл, `/matt goto` и `/matt spec` отказывают, `/skill:` и чтение чужого `SKILL.md` не меняют фазу, `tool_result` не закрывает гейт родителя. Проверено тестами и живым RPC. |
-| **Самозакрытие тикетов моделью через `bash`** | `engine.ts:trackerRead`, `index.ts:tool_result` | **Закрыто (97e5885)** | Гейт закрывает только одиночная read-only команда трекера (`gh issue view|list`, `gh api`) без `;`, `&&`, `|`, `>` и подстановок. `gh issue close`, `gh issue edit` и `gh issue list; echo 0` гейт не закрывают — проверено тестами и живой сессией. Осталось: модель может закрыть тикет, а потом честно прочитать `0`; это данные трекера, а не подлог. |
+| **Самозакрытие тикетов моделью через `bash`** | `engine.ts:trackerRead`, `index.ts:tool_result` | **Закрыто (97e5885, afb8b0f)** | Гейт закрывает только одиночная read-only команда `gh issue view` или `gh issue list` без `;`, `&&`, `|`, `>` и подстановок. `gh issue close`, `gh issue edit`, `gh issue list; echo 0` и `gh api …` гейт не закрывают — проверено тестами и живой сессией. Осталось: модель может закрыть тикет любым способом, а потом честно прочитать `0`; это данные трекера, а не подлог. |
 
 ---
 
 ## 4. Пропущенные контракты и деградация графа переходов
 
-В `CONTRACTS` (`contracts.ts:44-150`) определены ровно 11 скиллов. При этом в списках `successors` указаны фазы, не имеющие контрактов:
-- `implement` (`contracts.ts:110`): преемники `retro`, `pr`, `handoff` (контрактов нет);
-- `implement-spec` (`contracts.ts:118`): преемники `retro`, `pr`, `handoff` (контрактов нет);
-- `code-review` (`contracts.ts:137`): преемники `retro`, `pr`, `handoff` (контрактов нет);
-- Входные и вспомогательные скиллы флоу `wayfinder`, `ask-matt`, `improve-codebase-architecture`, `setup-matt-pocock-skills` контрактов не имеют вовсе.
+### Как было в первой редакции
 
-### Что ломается из-за отсутствия контрактов
+В `CONTRACTS` было 11 контрактов, а в списках `successors` стояли фазы без контрактов: `implement` (`contracts.ts:110`), `implement-spec` (`contracts.ts:118`) и `code-review` (`contracts.ts:137`) объявляли `retro`, `pr`, `handoff`, которых в таблице не было. Сейчас в таблице 14 контрактов. Входные и вспомогательные скиллы (`wayfinder`, `ask-matt`, `improve-codebase-architecture`, `setup-matt-pocock-skills`) контрактов не имеют и сейчас — они не фазы флоу.
 
-В функции `decide()` (`engine.ts:126-140`):
+### Как было в первой редакции (порядок проверок)
+
 ```ts
-if (!contractOf(contracts, req.name)) return { allow: true, phase: state.phase }; // engine.ts:133
-if (!c) return { allow: true, phase: req.name };                                  // engine.ts:134
-if (c.successors.includes(req.name)) return { allow: true, phase: req.name };     // engine.ts:135
+// ответ «нет контракта» приходил раньше проверки successors
+if (!contractOf(contracts, req.name)) return { allow: true, phase: state.phase };
+if (!c) return { allow: true, phase: req.name };
+if (c.successors.includes(req.name)) return { allow: true, phase: req.name };
 ```
-1. Строка `engine.ts:133` выполняется **до** проверки `c.successors.includes(req.name)` (`engine.ts:135`).
-2. При переходе модели в `pr`, `retro` или `handoff` функция `decide` возвращает `{ allow: true, phase: state.phase }`. Фаза **не меняется** и остается `implement` или `code-review`.
-3. Декларация `successors: ["retro", "pr", "handoff"]` является мертворожденным кодом (dead code): эти этапы в принципе невозможно сделать текущей фазой через чтение `SKILL.md`.
-4. В результате для фаз `pr` и `retro` невозможно задать и проконтролировать обязательные дисциплинарные требования (структура тела PR из `pr/SKILL.md:16-30`, ретроспективный анализ из `retro/SKILL.md:9-30`).
-5. Любой неконтрактный скилл (`wayfinder`, `ask-matt`) открывается из абсолютно любой фазы (даже из `grilling`), так как строка `engine.ts:133` безусловно разрешает чтение.
+
+Следствие: переход в `pr`, `retro` или `handoff` возвращал `{ allow: true, phase: state.phase }` — фаза не менялась, объявление в `successors` было мёртвым кодом, а дисциплинарные требования этих шагов проверить было нечем.
 
 ### Исправлено в `42ff606`
 

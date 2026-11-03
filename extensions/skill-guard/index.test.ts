@@ -234,6 +234,17 @@ async function asChild<T>(fn: () => T): Promise<T> {
 	}
 }
 
+/** The same, but with no parent session named: a child with nothing to inherit. */
+async function asChildWithoutParent<T>(fn: () => T): Promise<T> {
+	process.env.PI_SUBAGENT_CHILD = "1";
+	delete process.env.PI_SUBAGENT_PARENT_SESSION;
+	try {
+		return await fn();
+	} finally {
+		delete process.env.PI_SUBAGENT_CHILD;
+	}
+}
+
 /** A parent already inside implement-spec with a spec, and the child that inherits it. */
 async function parentAndChild() {
 	const context = project();
@@ -276,6 +287,24 @@ test("a subagent does not close the parent's gate, and writes no file of its own
 	const gate = (await parent.fire("context", { messages: [] })) as { messages: Msg[] };
 	assert.match(gate.messages[0]?.content ?? "", /гейт открыт/, "the parent still has work to close");
 	assert.equal(existsSync(join(String(context.cwd), ".pi", "skills-guard", "sessions", "child-1.json")), false, "a child writes no state file");
+});
+
+test("a subagent whose parent's phase cannot be read refuses to work", async () => {
+	// The parent id is set but no file exists: nothing to inherit, and starting cold is exactly
+	// what the guard exists to prevent.
+	const orphan = await asChild(() => harness("#42", true, project()));
+	await orphan.fire("session_start", {});
+	const blocked = (await orphan.fire("tool_call", write)) as { block?: boolean; reason?: string };
+	assert.equal(blocked.block, true);
+	assert.match(blocked.reason ?? "", /фазу родителя/);
+	await orphan.command("matt", "");
+	assert.match(orphan.notice(), /недоступна/);
+});
+
+test("a subagent with no parent session named refuses to work", async () => {
+	const orphan = await asChildWithoutParent(() => harness("#42", true, project()));
+	await orphan.fire("session_start", {});
+	assert.equal(((await orphan.fire("tool_call", write)) as { block?: boolean }).block, true);
 });
 
 test("a reload keeps the phase the last session ended in", async () => {
