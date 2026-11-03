@@ -5,7 +5,7 @@
  */
 import test from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, mkdtempSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
@@ -475,4 +475,46 @@ test("a composite or mutating command does not close the gate", async () => {
 	// A read of the tracker does close it.
 	await h.fire("tool_result", { toolName: "bash", input: { command: "gh issue list --state open -q length" }, content: [{ type: "text", text: "0\n" }], isError: false });
 	assert.equal(await h.fire("tool_call", readSkill("code-review")), undefined);
+});
+
+test("without a UI the gate is announced, not asked, and the move goes through", async () => {
+	const h = harness("ok", true, { hasUI: false });
+	await h.fire("tool_call", readSkill("grilling"));
+	assert.equal(await h.fire("tool_call", readSkill("grill-with-docs")), undefined, "headless must not deadlock");
+	assert.match(h.notice(), /не спросить без UI/);
+	assert.equal(h.asked(), 0, "there is no dialog to ask in");
+});
+
+test("without a UI the missing spec is announced and the move goes through", async () => {
+	const h = harness(undefined, true, { hasUI: false });
+	assert.equal(await h.fire("tool_call", readSkill("implement-spec")), undefined);
+	assert.match(h.notice(), /без спеки/);
+	assert.match(h.status(), /phase: implement-spec/);
+});
+
+test("without a UI an unknown tool is blocked, not guessed", async () => {
+	const h = harness("ok", true, { hasUI: false });
+	await h.fire("tool_call", readSkill("grilling"));
+	const result = (await h.fire("tool_call", { toolName: "mcp_search", input: {} })) as { block?: boolean; reason?: string };
+	assert.equal(result.block, true);
+	assert.match(result.reason ?? "", /без диалога/);
+});
+
+test("a state file that cannot be written is reported, and the session keeps its guard", async () => {
+	const context = project();
+	// A file where the directory must be: mkdir fails, the write fails, the phase still holds.
+	writeFileSync(join(String(context.cwd), ".pi", "skills-guard"), "not a directory");
+	const h = harness("ok", true, context);
+	await h.fire("session_start", {});
+	await h.fire("tool_call", readSkill("to-spec"));
+	await h.command("matt", "");
+	assert.match(h.notice(), /НЕ сохранено/, "a silent failure would look like a saved phase");
+	assert.match(h.status(), /phase: to-spec/);
+	assert.equal(((await h.fire("tool_call", write)) as { block?: boolean }).block, true, "the guard still guards");
+});
+
+test("a turn that ends with a queued message is not continued", async () => {
+	const h = harness("#42", true, { hasPendingMessages: () => true });
+	await h.fire("tool_call", readSkill("implement-spec"));
+	assert.equal(await h.fire("agent_before_settle", {}), undefined, "someone is already waiting in the queue");
 });
