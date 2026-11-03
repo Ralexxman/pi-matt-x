@@ -66,6 +66,7 @@ function harness(answer: string | undefined, permission = true, context: Record<
 
 const readSkill = (name: string) => ({ toolName: "read", input: { path: `C:/Users/ralex/.agents/skills/${name}/SKILL.md` } });
 const write = { toolName: "write", input: { path: "a.ts", content: "x" } };
+const GH_COUNT = { command: "gh issue list --state open -q length" };
 
 test("cold start lets any tool through", async () => {
 	const h = harness("ok");
@@ -277,15 +278,19 @@ test("implement-spec leaves only for a closed spec, as the tracker reports it", 
 	assert.match(open.reason ?? "", /трекер/);
 
 	// tickets still open prove nothing
-	await h.fire("tool_result", { toolName: "bash", input: {}, content: [{ type: "text", text: "3" }], isError: false });
+	await h.fire("tool_result", { toolName: "bash", input: GH_COUNT, content: [{ type: "text", text: "3" }], isError: false });
 	assert.equal(((await h.fire("tool_call", readSkill("code-review"))) as { block?: boolean }).block, true);
 
 	// neither does a check that failed
-	await h.fire("tool_result", { toolName: "bash", input: {}, content: [{ type: "text", text: "0" }], isError: true });
+	await h.fire("tool_result", { toolName: "bash", input: GH_COUNT, content: [{ type: "text", text: "0" }], isError: true });
 	assert.equal(((await h.fire("tool_call", readSkill("code-review"))) as { block?: boolean }).block, true, "a failed command proves nothing");
 
+	// nor a zero someone typed instead of asked for
+	await h.fire("tool_result", { toolName: "bash", input: { command: "printf 0" }, content: [{ type: "text", text: "0" }], isError: false });
+	assert.equal(((await h.fire("tool_call", readSkill("code-review"))) as { block?: boolean }).block, true, "only the tracker talks");
+
 	// the tracker's clean answer does
-	await h.fire("tool_result", { toolName: "bash", input: {}, content: [{ type: "text", text: "0" }], isError: false });
+	await h.fire("tool_result", { toolName: "bash", input: GH_COUNT, content: [{ type: "text", text: "0" }], isError: false });
 	assert.equal(await h.fire("tool_call", readSkill("code-review")), undefined);
 });
 
@@ -328,7 +333,7 @@ test("the tracker's count reaches the block, and no count is not a zero", async 
 	const before = (await h.fire("context", { messages: [] })) as { messages: Msg[] };
 	assert.match(before.messages[0]?.content ?? "", /осталось: неизвестно/);
 
-	await h.fire("tool_result", { toolName: "bash", input: {}, content: [{ type: "text", text: "3\n" }], isError: false });
+	await h.fire("tool_result", { toolName: "bash", input: GH_COUNT, content: [{ type: "text", text: "3\n" }], isError: false });
 	const after = (await h.fire("context", { messages: [] })) as { messages: Msg[] };
 	assert.match(after.messages[0]?.content ?? "", /3 открытых тикетов/);
 });
@@ -354,7 +359,7 @@ test("a human gate is never talked over", async () => {
 test("a closed gate ends the turn, and the ceiling stops a loop", async () => {
 	const closed = harness("#42");
 	await closed.fire("tool_call", readSkill("implement-spec"));
-	await closed.fire("tool_result", { toolName: "bash", input: {}, content: [{ type: "text", text: "CLOSED" }], isError: false });
+	await closed.fire("tool_result", { toolName: "bash", input: GH_COUNT, content: [{ type: "text", text: "CLOSED" }], isError: false });
 	assert.equal(await closed.fire("agent_before_settle", {}), undefined);
 
 	const stuck = harness("#42");

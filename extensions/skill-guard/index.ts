@@ -79,6 +79,7 @@ export default function (pi: ExtensionAPI): void {
 		return [
 			`фаза: ${c.name}`,
 			...(c.needsSpec || state.spec ? [`спека: ${state.spec?.ref ?? "не названа"}`] : []),
+			`осталось: ${state.tickets === undefined ? "неизвестно — прогони проверку" : `${state.tickets} открытых тикетов`}`,
 			`разрешено: ${c.grants.join(", ")}`,
 			`дальше: ${c.successors.join(", ") || "—"}`,
 			gate ? `открытый гейт: ${gateText(gate)}` : "гейт: закрыт",
@@ -232,6 +233,9 @@ export default function (pi: ExtensionAPI): void {
 	pi.on("tool_result", (event, ctx) => {
 		// Only a command can prove a tracker state; an edit or a read proves nothing.
 		if (grantFor(event.toolName) !== "bash") return;
+		// And only the tracker's own command: `printf 0` would close the gate just as well.
+		const command = typeof event.input?.command === "string" ? event.input.command : "";
+		if (!/^\s*gh\s/.test(command)) return;
 		const output = event.content.map((part) => (part.type === "text" ? part.text : "")).join("\n");
 
 		// The tracker's last answer is the one number worth carrying past a compaction.
