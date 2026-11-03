@@ -202,6 +202,22 @@ function project() {
 	return { cwd: root, sessionManager: { getSessionId: () => "session-1" } };
 }
 
+test("the ticket count comes back with the phase after a reload", async () => {
+	const context = project();
+	const before = harness("#42", true, context);
+	await before.fire("session_start", {});
+	await before.fire("tool_call", readSkill("implement-spec"));
+	await before.fire("tool_result", { toolName: "bash", input: GH_COUNT, content: [{ type: "text", text: "2\n" }], isError: false });
+
+	// A new instance on the same file: what was written is what comes back, and the block
+	// says how much is left without earning the number again.
+	const after = harness("#42", true, context);
+	await after.fire("session_start", {});
+	type Msg = { content: string };
+	const block = (await after.fire("context", { messages: [] })) as { messages: Msg[] };
+	assert.match(block.messages[0]?.content ?? "", /2 открытых тикетов/);
+});
+
 test("a reload keeps the phase the last session ended in", async () => {
 	const context = project();
 

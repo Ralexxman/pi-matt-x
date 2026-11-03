@@ -101,12 +101,11 @@ export default function (pi: ExtensionAPI): void {
 		sessionFile = fileFor(ctx);
 		reset();
 		// A restored phase is the whole point of the file: without it a reload drops the guard.
+		// Everything the file holds comes back. A field the restore lists by hand is a field
+		// it can forget — `tickets` was exactly that: after every reload the block said
+		// «неизвестно», and the count had to be earned again by running the check.
 		const saved = sessionFile ? readState(sessionFile) : null;
-		if (saved) {
-			state.phase = saved.phase;
-			state.gatesPassed = saved.gatesPassed;
-			if (saved.spec) state.spec = saved.spec;
-		}
+		if (saved) Object.assign(state, saved);
 		commit(ctx);
 	});
 
