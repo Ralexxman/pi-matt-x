@@ -151,12 +151,15 @@ export function decide(state: GuardState, req: Request, contracts: readonly Cont
 		// A sub-skill runs inside the open phase: it neither moves the flow nor narrows
 		// what the phase grants. With no phase open, only a contracted one is the way in.
 		if (SUB_SKILLS.has(req.name)) return { allow: true, phase: state.phase ?? contractOf(contracts, req.name)?.name ?? null };
+		// A declared successor is a phase even before it has a contract of its own: the
+		// declaration is the flow's statement about order. Answering «no contract» first made
+		// `pr`, `retro` and `handoff` readable but never open — declared and unreachable.
+		if (c?.successors.includes(req.name)) return { allow: true, phase: req.name };
 		// A skill without a contract is not a phase: it may be read from anywhere, but
 		// it does not lift the restrictions of the phase that is open. Only the user, by
 		// naming a phase, can move the flow.
 		if (!contractOf(contracts, req.name)) return { allow: true, phase: state.phase };
 		if (!c) return { allow: true, phase: req.name };
-		if (c.successors.includes(req.name)) return { allow: true, phase: req.name };
 		const allowed = c.successors.length ? c.successors.join(", ") : "ничего — эта фаза последняя";
 		return blocked(
 			`Фаза «${c.name}» не переходит в «${req.name}». Дальше отсюда: ${allowed}.` +

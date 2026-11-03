@@ -152,4 +152,37 @@ export const CONTRACTS: readonly Contract[] = [
 		grants: ["read", "write", "bash"],
 		successors: ["grill-with-docs", "to-spec", "implement"],
 	},
+	{
+		// Writes one document into the OS temp dir: no shell, no repo writes.
+		name: "handoff",
+		grants: ["read", "write"],
+		successors: [],
+		gate: {
+			kind: "user",
+			quote: "Write a handoff document summarising the current conversation so a fresh agent can continue the work.",
+			question: "Хэндофф-документ записан и понятен следующей сессии?",
+		},
+	},
+	{
+		// Writes the PR body; `gh pr create` is a shell command, so bash is granted.
+		name: "pr",
+		grants: ["read", "bash"],
+		successors: ["handoff"],
+		gate: {
+			kind: "user",
+			quote: "Skip all preambles and keep prose brief.",
+			question: "Тело PR написано и отправлено?",
+		},
+	},
+	{
+		// Reads session logs and may write the checks it recommends.
+		name: "retro",
+		grants: ["read", "write", "bash"],
+		successors: ["implement"],
+		gate: {
+			kind: "user",
+			quote: "Present these candidates to the user, in order of severity.",
+			question: "Кандидаты улучшений показаны и выбраны?",
+		},
+	},
 ];

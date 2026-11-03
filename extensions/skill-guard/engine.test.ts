@@ -105,8 +105,11 @@ test("gate is asked once, for the phase that has one", () => {
 });
 
 test("every successor is a reachable skill or an unknown one", () => {
+	// The flow has exactly one end: the handoff, which exists to be picked up by a fresh
+	// session rather than to lead anywhere inside this one.
+	const terminal = CONTRACTS.filter((c) => c.successors.length === 0);
+	assert.deepEqual(terminal.map((c) => c.name), ["handoff"], "only the handoff ends the flow");
 	for (const c of CONTRACTS) {
-		assert.ok(c.successors.length > 0, `${c.name} has no way out`);
 		assert.ok(!c.successors.includes(c.name), `${c.name} loops to itself`);
 	}
 	assert.deepEqual(CONTRACTS.find((c) => c.name === "tdd")?.successors, ["code-review"]);
@@ -204,4 +207,20 @@ test("the phase block says what has to survive a compaction", () => {
 	const closed = phaseBlock(CONTRACTS, { phase: "implement-spec", gatesPassed: ["implement-spec"], spec: { ref: "#42" } }) ?? "";
 	assert.match(closed, /гейт закрыт/);
 	assert.match(closed, /осталось: неизвестно/);
+});
+
+test("a declared successor becomes the open phase", () => {
+	// Declared in `successors` and contracted now: the last steps of the flow are real phases.
+	assert.deepEqual(decide(at("implement-spec"), skill("pr"), CONTRACTS), { allow: true, phase: "pr" });
+	assert.deepEqual(decide(at("code-review"), skill("retro"), CONTRACTS), { allow: true, phase: "retro" });
+	assert.deepEqual(decide(at("code-review"), skill("handoff"), CONTRACTS), { allow: true, phase: "handoff" });
+});
+
+test("a declared successor is a phase even before it has a contract of its own", () => {
+	// The declaration is the flow's statement about order; answering «no contract» first
+	// made such a skill readable but never open.
+	const bare = [{ name: "a", grants: ["read"], successors: ["b"] }] as unknown as typeof CONTRACTS;
+	assert.deepEqual(decide(at("a"), skill("b"), bare), { allow: true, phase: "b" });
+	// A skill that is neither contracted nor declared still does not move the phase.
+	assert.deepEqual(decide(at("a"), skill("research"), bare), { allow: true, phase: "a" });
 });
