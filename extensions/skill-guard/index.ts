@@ -63,6 +63,16 @@ export default function (pi: ExtensionAPI): void {
 		);
 	};
 
+	/**
+	 * Every state change ends here: the file learns about it and so does the status line. One
+	 * call instead of the same three in every handler, and the file is found here, once.
+	 */
+	const commit = (ctx: unknown) => {
+		sessionFile ??= fileFor(ctx);
+		persist();
+		showPhase((ctx as { ui: { setStatus: (key: string, text: string | undefined) => void } }).ui);
+	};
+
 	const reset = () => {
 		state.phase = null;
 		state.gatesPassed = [];
@@ -97,7 +107,7 @@ export default function (pi: ExtensionAPI): void {
 			state.gatesPassed = saved.gatesPassed;
 			if (saved.spec) state.spec = saved.spec;
 		}
-		showPhase(ctx.ui);
+		commit(ctx);
 	});
 
 	// `/skill:name` is expanded into the prompt without a `read` call, so the user's own
@@ -115,9 +125,7 @@ export default function (pi: ExtensionAPI): void {
 		state.gatesPassed = [];
 		allowed.clear();
 		lastClosure = null;
-		sessionFile ??= fileFor(ctx);
-		persist();
-		showPhase(ctx.ui);
+		commit(ctx);
 	});
 
 	pi.on("tool_call", async (event, ctx) => {
@@ -161,7 +169,7 @@ export default function (pi: ExtensionAPI): void {
 					}
 					state.gatesPassed.push(state.phase);
 					lastClosure = { phase: state.phase, answer: answer.trim() };
-					persist();
+					commit(ctx);
 					ctx.ui.notify(`skill-guard: ответ записан → ${name}`, "info");
 				}
 			}
@@ -193,9 +201,7 @@ export default function (pi: ExtensionAPI): void {
 				state.gatesPassed = state.gatesPassed.filter((p) => p !== decision.phase);
 			}
 			state.phase = decision.phase;
-			sessionFile ??= fileFor(ctx);
-			persist();
-			showPhase(ctx.ui);
+			commit(ctx);
 			return;
 		}
 
@@ -243,7 +249,7 @@ export default function (pi: ExtensionAPI): void {
 			const left = /^\s*(\d+)\s*$/m.exec(output);
 			if (left) {
 				state.tickets = Number(left[1]);
-				persist();
+				commit(ctx);
 			}
 		}
 
@@ -253,8 +259,7 @@ export default function (pi: ExtensionAPI): void {
 		if (!commandCloses(gate, event.isError, output)) return;
 		state.gatesPassed.push(c.name);
 		lastClosure = { phase: c.name, answer: new RegExp(gate.must, "m").exec(output)?.[0] ?? "—" };
-		persist();
-		showPhase(ctx.ui);
+		commit(ctx);
 		ctx.ui.notify(`skill-guard: фаза «${c.name}» закрыта данными трекера`, "info");
 	});
 
@@ -296,7 +301,7 @@ export default function (pi: ExtensionAPI): void {
 			const spec = /^spec\s+(.+)$/.exec(args.trim());
 			if (spec) {
 				state.spec = { ref: spec[1].trim() };
-				persist();
+				commit(ctx);
 				ctx.ui.notify(`skill-guard: спека → ${state.spec.ref}`, "info");
 				return;
 			}
@@ -315,8 +320,7 @@ export default function (pi: ExtensionAPI): void {
 			state.gatesPassed = [];
 			allowed.clear();
 			lastClosure = null;
-			persist();
-			showPhase(ctx.ui);
+			commit(ctx);
 			ctx.ui.notify(`skill-guard: фаза → ${name}`, "info");
 		},
 	});
