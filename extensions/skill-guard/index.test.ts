@@ -10,10 +10,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import register from "./index.ts";
+import { CONTRACTS } from "./contracts.ts";
 
 function harness(answer: string | undefined, permission = true, context: Record<string, unknown> = {}) {
 	const handlers: Record<string, ((event: unknown, ctx: unknown) => unknown)[]> = {};
 	const commands: Record<string, (args: string, ctx: unknown) => Promise<void>> = {};
+	const registered: Record<string, { getArgumentCompletions?: (prefix: string) => { value: string; label: string }[] | null }> = {};
 	let asked = 0;
 	let confirmed = 0;
 	const statuses: string[] = [];
@@ -36,8 +38,9 @@ function harness(answer: string | undefined, permission = true, context: Record<
 	};
 	const pi = {
 		on: (name: string, fn: never) => (handlers[name] ??= []).push(fn),
-		registerCommand: (name: string, options: { handler: (args: string, ctx: unknown) => Promise<void> }) => {
+		registerCommand: (name: string, options: { handler: (args: string, ctx: unknown) => Promise<void>; getArgumentCompletions?: (prefix: string) => { value: string; label: string }[] | null }) => {
 			commands[name] = options.handler;
+			registered[name] = options;
 		},
 	};
 	register(pi as unknown as ExtensionAPI);
@@ -57,6 +60,7 @@ function harness(answer: string | undefined, permission = true, context: Record<
 	return {
 		fire,
 		command,
+		completions: (prefix: string) => registered.matt?.getArgumentCompletions?.(prefix) ?? null,
 		asked: () => asked,
 		confirmed: () => confirmed,
 		status: () => statuses.at(-1) ?? "",
@@ -324,6 +328,17 @@ test("/matt shows the command gate as a check to run, with the command", async (
 	await h.command("matt", "");
 	assert.match(h.notice(), /проверку/);
 	assert.match(h.status(), /phase: implement-spec/);
+});
+
+test("/matt completes its own arguments", async () => {
+	const h = harness("#42");
+	// Nothing typed yet: the two words the command understands.
+	assert.deepEqual(h.completions("")?.map((i) => i.value), ["goto ", "spec "]);
+	// A phase prefix narrows to phases, and the value keeps the word the handler parses.
+	assert.deepEqual(h.completions("goto impl")?.map((i) => i.value), ["goto implement", "goto implement-spec"]);
+	const full = h.completions("goto implement");
+	assert.equal(full?.length, 2, "implement is a prefix of implement-spec, both stay offerable");
+	assert.deepEqual(h.completions("goto ")?.length, CONTRACTS.length, "every phase is offerable");
 });
 
 test("every request carries the phase block, exactly once", async () => {

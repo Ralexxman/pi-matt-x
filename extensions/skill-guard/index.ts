@@ -295,6 +295,21 @@ export default function (pi: ExtensionAPI): void {
 	// `/matt` is the only way back that does not need the model's cooperation.
 	pi.registerCommand("matt", {
 		description: "skill-guard: фаза, гейты; /matt goto <skill>; /matt spec <#issue|путь>",
+		// Pi asks the command for its own argument hints; without this it has nothing to offer
+		// after `/matt `. The phase names come from the same table the handler checks.
+		getArgumentCompletions: (prefix: string) => {
+			const goto = /^(goto\s+)([\w-]*)$/.exec(prefix);
+			if (goto) {
+				return CONTRACTS.filter((c) => c.name.startsWith(goto[2] ?? "")).map((c) => ({
+					value: `${goto[1]}${c.name}`,
+					label: c.name,
+					description: `допускает: ${c.grants.join(", ")}`,
+				}));
+			}
+			return ["goto ", "spec "]
+				.filter((word) => word.startsWith(prefix))
+				.map((word) => ({ value: word, label: word.trim(), description: word === "goto " ? "сменить фазу" : "назвать спеку" }));
+		},
 		handler: async (args, ctx) => {
 			sessionFile ??= fileFor(ctx);
 			const spec = /^spec\s+(.+)$/.exec(args.trim());
