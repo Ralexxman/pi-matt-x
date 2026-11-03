@@ -1,7 +1,7 @@
 /**
  * The whole decision logic. Pure: no filesystem, no UI, no Pi. index.ts wires it up.
  */
-import { SUB_SKILLS, type Contract, type Grant } from "./contracts.ts";
+import { SUB_SKILLS, type Contract, type Gate, type Grant } from "./contracts.ts";
 
 export interface GuardState {
 	/** Skill currently open, or null before the flow starts. */
@@ -12,7 +12,7 @@ export interface GuardState {
 	 * The spec the open phase works on. A phase whose contract asks for it cannot change
 	 * files without one: the work would have nowhere to land, and nothing to close.
 	 */
-	spec?: { ref: string; check?: string };
+	spec?: { ref: string };
 }
 
 export type Request =
@@ -79,10 +79,33 @@ function blocked(reason: string): Decision {
 }
 
 /** The gate of the phase being entered has to be answered before the move. */
-export function needsGate(contracts: readonly Contract[], state: GuardState): Contract["gate"] | undefined {
+export function needsGate(contracts: readonly Contract[], state: GuardState): Gate | undefined {
 	const c = contractOf(contracts, state.phase);
 	if (!c?.gate) return undefined;
 	return state.gatesPassed.includes(c.name) ? undefined : c.gate;
+}
+
+/**
+ * A `command` gate is closed by the runner's own output, not by the model's word: the
+ * tool ran successfully and what it printed is the marker the gate asks for.
+ */
+export function commandCloses(gate: Gate, isError: boolean, output: string): boolean {
+	if (gate.kind !== "command" || isError) return false;
+	return new RegExp(gate.must, "m").test(output);
+}
+
+/** What a gate asks for, in one line: the question for a person, the check for a command. */
+export function gateText(gate: Gate): string {
+	return gate.kind === "user" ? gate.quote : gate.hint;
+}
+
+/**
+ * The command that proves a spec closed, derived from the anchor the user named: an issue
+ * number has a tracker state, a path has none (nothing to ask, only a person can say).
+ */
+export function specCheck(ref: string): string | undefined {
+	const issue = /^#?(\d+)$/.exec(ref.trim());
+	return issue ? `gh issue view ${issue[1]} --json state -q .state` : undefined;
 }
 
 /**
@@ -113,7 +136,7 @@ export function decide(state: GuardState, req: Request, contracts: readonly Cont
 		const allowed = c.successors.length ? c.successors.join(", ") : "ничего — эта фаза последняя";
 		return blocked(
 			`Фаза «${c.name}» не переходит в «${req.name}». Дальше отсюда: ${allowed}.` +
-				(c.gate ? `\nСначала закрой текущую фазу: ${c.gate.quote}` : ""),
+				(c.gate ? `\nСначала закрой текущую фазу: ${gateText(c.gate)}` : ""),
 		);
 	}
 

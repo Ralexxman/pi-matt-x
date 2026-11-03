@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { CONTRACTS } from "./contracts.ts";
-import { decide, grantFor, needsGate, needsPermission, skillNameFromPath, type GuardState } from "./engine.ts";
+import { commandCloses, decide, gateText, grantFor, needsGate, needsPermission, skillNameFromPath, specCheck, type GuardState } from "./engine.ts";
 
 const at = (phase: string | null, gatesPassed: string[] = []): GuardState => ({ phase, gatesPassed });
 const tool = (name: string) => ({ kind: "tool" as const, tool: name });
@@ -164,4 +164,29 @@ test("a named spec lets implement-spec work", () => {
 test("only a phase whose contract asks for a spec needs one", () => {
 	assert.equal(decide(at("implement"), tool("write"), CONTRACTS).allow, true);
 	assert.equal(CONTRACTS.filter((c) => c.needsSpec).length, 1);
+});
+
+const exitGate = CONTRACTS.find((c) => c.name === "implement-spec")?.gate;
+
+test("implement-spec ends on the tracker's word, not the model's", () => {
+	assert.equal(exitGate?.kind, "command");
+	if (exitGate?.kind !== "command") return;
+	assert.equal(commandCloses(exitGate, false, "0"), true, "no open sub-issues");
+	assert.equal(commandCloses(exitGate, false, "CLOSED"), true, "the spec itself is closed");
+	assert.equal(commandCloses(exitGate, false, "3"), false, "open tickets keep the phase open");
+	assert.equal(commandCloses(exitGate, false, "10"), false, "10 is not 0");
+	assert.equal(commandCloses(exitGate, true, "0"), false, "a failed command proves nothing");
+});
+
+test("a command gate reads as its check, a user gate as its question", () => {
+	if (!exitGate) throw new Error("implement-spec has an exit gate");
+	assert.match(gateText(exitGate), /gh|проверк/);
+	const ask = needsGate(CONTRACTS, at("to-tickets"));
+	assert.ok(ask && gateText(ask).length > 0);
+});
+
+test("the check command is derived from an issue anchor only", () => {
+	assert.equal(specCheck("#42"), "gh issue view 42 --json state -q .state");
+	assert.equal(specCheck("42"), "gh issue view 42 --json state -q .state");
+	assert.equal(specCheck(".scratch/feat/"), undefined, "a path has no tracker state");
 });

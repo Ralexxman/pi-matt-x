@@ -13,6 +13,14 @@
 export type Grant = "read" | "write" | "bash";
 
 /**
+ * How a phase is proved finished. `user` is a question only a person can answer;
+ * `command` is the tracker's own output, which the model can neither fake nor skip.
+ */
+export type Gate =
+	| { kind: "user"; quote: string; question: string; source?: string }
+	| { kind: "command"; must: string; hint: string };
+
+/**
  * Skills the flow runs *inside* another phase rather than moving to it. Entering one
  * is not a phase boundary: the open phase, its grants and its gate question stay as
  * they are.
@@ -36,7 +44,7 @@ export interface Contract {
 	 * skill's own wording of what "done" means, shown as evidence; `source` names the
 	 * skill whose SKILL.md holds that wording when it is not this one.
 	 */
-	gate?: { quote: string; question: string; source?: string };
+	gate?: Gate;
 }
 
 export const CONTRACTS: readonly Contract[] = [
@@ -46,6 +54,7 @@ export const CONTRACTS: readonly Contract[] = [
 		grants: ["read"],
 		successors: ["grill-me", "grill-with-docs", "domain-modeling"],
 		gate: {
+			kind: "user",
 			quote: "The session is done when the frontier is empty: every branch of the design tree visited, nothing left silently assumed.",
 			question: "Интервью закончено? Что осталось нерешённым?",
 		},
@@ -58,6 +67,7 @@ export const CONTRACTS: readonly Contract[] = [
 		gate: {
 			// grill-me delegates the interview itself (`grill-me/SKILL.md:7`), so the end
 			// condition is grilling's.
+			kind: "user",
 			source: "grilling",
 			quote: "The session is done when the frontier is empty: every branch of the design tree visited, nothing left silently assumed.",
 			question: "План выяснен? Что осталось нерешённым?",
@@ -72,6 +82,7 @@ export const CONTRACTS: readonly Contract[] = [
 		// says to call it. Listed first so it reads as the step it is.
 		successors: ["grilling", "to-spec", "domain-modeling", "prototype"],
 		gate: {
+			kind: "user",
 			source: "grilling",
 			quote: "The session is done when the frontier is empty: every branch of the design tree visited, nothing left silently assumed.",
 			question: "GLOSSARY.md и ADR записаны, решения приняты? Пора в спеку?",
@@ -82,6 +93,7 @@ export const CONTRACTS: readonly Contract[] = [
 		grants: ["read", "bash"],
 		successors: ["to-tickets"],
 		gate: {
+			kind: "user",
 			quote: "Check with the user that these seams match their expectations.",
 			question: "Швы (seams) в спеке проверены с тобой и совпадают с ожиданиями?",
 		},
@@ -92,6 +104,7 @@ export const CONTRACTS: readonly Contract[] = [
 		grants: ["read", "write", "bash"],
 		successors: ["implement", "implement-spec"],
 		gate: {
+			kind: "user",
 			quote: "Each slice is sized to fit in a single fresh context window",
 			question: "Тикеты нарезаны так, что каждый влезает в свежее окно?",
 		},
@@ -107,6 +120,14 @@ export const CONTRACTS: readonly Contract[] = [
 		// Nine steps against one spec: without the spec there is nothing to close.
 		needsSpec: true,
 		successors: ["tdd", "code-review", "diagnosing-bugs", "retro", "pr", "handoff"],
+		// The one gate a model cannot talk its way through: no open children under the spec
+		// map, as the tracker reports them. `gh issue list --state open` prints 0 when done,
+		// `gh issue view <n> --json state -q .state` prints CLOSED.
+		gate: {
+			kind: "command",
+			must: "^(0|CLOSED|closed|DONE|done)$",
+			hint: "прогони проверку спеки (gh: открытые под-тикеты → 0, или state → CLOSED) и покажи вывод",
+		},
 	},
 	{
 		name: "tdd",

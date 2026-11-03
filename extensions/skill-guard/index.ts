@@ -17,7 +17,7 @@
  */
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { CONTRACTS, SUB_SKILLS } from "./contracts.ts";
-import { contractOf, decide, needsGate, needsPermission, skillNameFromPath, type GuardState } from "./engine.ts";
+import { contractOf, decide, commandCloses, gateText, grantFor, needsGate, needsPermission, skillNameFromPath, specCheck, type GuardState } from "./engine.ts";
 import { findRoot, readState, statePath, writeState } from "./state.ts";
 
 export default function (pi: ExtensionAPI): void {
@@ -78,7 +78,7 @@ export default function (pi: ExtensionAPI): void {
 			...(c.needsSpec || state.spec ? [`спека: ${state.spec?.ref ?? "не названа"}`] : []),
 			`разрешено: ${c.grants.join(", ")}`,
 			`дальше: ${c.successors.join(", ") || "—"}`,
-			gate ? `открытый гейт: ${gate.question}` : "гейт: закрыт",
+			gate ? `открытый гейт: ${gateText(gate)}` : "гейт: закрыт",
 			saveError ? `состояние НЕ сохранено: ${saveError}` : `состояние: ${sessionFile ?? "некуда сохранять"}`,
 		].join("\n");
 	};
@@ -130,6 +130,17 @@ export default function (pi: ExtensionAPI): void {
 			// the moment the flow moves on and the model cannot answer it itself.
 			const gate = name === state.phase || SUB_SKILLS.has(name) ? undefined : needsGate(CONTRACTS, state);
 			if (gate && state.phase) {
+				// A command gate is not a question: it waits for the tracker's own output, so the
+				// move is refused until the model has run the check and it came back clean.
+				if (gate.kind === "command") {
+					const check = state.spec ? specCheck(state.spec.ref) : undefined;
+					return {
+						block: true,
+						reason:
+							`Фаза «${state.phase}» закрывается данными трекера, а не словом. ` +
+							`Сначала: ${gate.hint}${check ? ` — ${check}` : ""}. Потом уже «${name}».`,
+					};
+				}
 				if (!ctx.hasUI) {
 					ctx.ui.notify(`skill-guard: гейт «${gate.question}» не спросить без UI`, "warning");
 				} else {
@@ -209,6 +220,23 @@ export default function (pi: ExtensionAPI): void {
 
 		const decision = decide(state, { kind: "tool", tool: event.toolName }, CONTRACTS);
 		if (!decision.allow) return { block: true, reason: decision.reason };
+	});
+
+	// The one gate a person does not have to answer: the runner already did. A command gate
+	// closes on the tool's own output, so the model cannot close it by claiming it is done.
+	pi.on("tool_result", (event, ctx) => {
+		const c = contractOf(CONTRACTS, state.phase);
+		const gate = needsGate(CONTRACTS, state);
+		if (!c || !gate || gate.kind !== "command") return;
+		// Only a command can prove a tracker state; an edit or a read proves nothing.
+		if (grantFor(event.toolName) !== "bash") return;
+		const output = event.content.map((part) => (part.type === "text" ? part.text : "")).join("\n");
+		if (!commandCloses(gate, event.isError, output)) return;
+		state.gatesPassed.push(c.name);
+		lastClosure = { phase: c.name, answer: new RegExp(gate.must, "m").exec(output)?.[0] ?? "—" };
+		persist();
+		showPhase(ctx.ui);
+		ctx.ui.notify(`skill-guard: фаза «${c.name}» закрыта данными трекера`, "info");
 	});
 
 	// `/matt` is the only way back that does not need the model's cooperation.

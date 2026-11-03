@@ -31,7 +31,7 @@ test("every successor is an installed skill", () => {
 
 test("every gate quote is verbatim in its skill", () => {
 	for (const c of CONTRACTS) {
-		if (!c.gate) continue;
+		if (c.gate?.kind !== "user") continue;
 		const source = readSkill(c.gate.source ?? c.name);
 		assert.ok(
 			squash(source).includes(squash(c.gate.quote)),

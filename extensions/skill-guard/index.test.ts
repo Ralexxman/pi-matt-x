@@ -256,8 +256,7 @@ test("the spec is asked once per session, not on every read", async () => {
 	assert.equal(h.asked(), 1, "the spec is already named");
 });
 
-test("the spec survives a reload with the phase", async () => {
-	const context = project();
+test("the spec survives a reload with the phase", async () => {	const context = project();
 	const before = harness("#42", true, context);
 	await before.fire("session_start", {});
 	await before.fire("tool_call", readSkill("implement-spec"));
@@ -268,4 +267,40 @@ test("the spec survives a reload with the phase", async () => {
 	assert.match(after.status(), /phase: implement-spec/);
 	assert.equal(await after.fire("tool_call", write), undefined, "no spec dialog after a reload");
 	assert.equal(after.asked(), 0);
+});
+
+test("implement-spec leaves only for a closed spec, as the tracker reports it", async () => {
+	const h = harness("#42");
+	await h.fire("tool_call", readSkill("implement-spec"));
+	const open = (await h.fire("tool_call", readSkill("code-review"))) as { block?: boolean; reason?: string };
+	assert.equal(open.block, true);
+	assert.match(open.reason ?? "", /трекер/);
+
+	// tickets still open prove nothing
+	await h.fire("tool_result", { toolName: "bash", input: {}, content: [{ type: "text", text: "3" }], isError: false });
+	assert.equal(((await h.fire("tool_call", readSkill("code-review"))) as { block?: boolean }).block, true);
+
+	// neither does a check that failed
+	await h.fire("tool_result", { toolName: "bash", input: {}, content: [{ type: "text", text: "0" }], isError: true });
+	assert.equal(((await h.fire("tool_call", readSkill("code-review"))) as { block?: boolean }).block, true, "a failed command proves nothing");
+
+	// the tracker's clean answer does
+	await h.fire("tool_result", { toolName: "bash", input: {}, content: [{ type: "text", text: "0" }], isError: false });
+	assert.equal(await h.fire("tool_call", readSkill("code-review")), undefined);
+});
+
+test("a result from a tool that is not a command never closes the gate", async () => {
+	const h = harness("#42");
+	await h.fire("tool_call", readSkill("implement-spec"));
+	await h.fire("tool_result", { toolName: "read", input: {}, content: [{ type: "text", text: "0" }], isError: false });
+	assert.equal(((await h.fire("tool_call", readSkill("code-review"))) as { block?: boolean }).block, true);
+});
+
+test("/matt shows the command gate as a check to run, with the command", async () => {
+	const h = harness("#42", true, project());
+	await h.fire("session_start", {});
+	await h.fire("tool_call", readSkill("implement-spec"));
+	await h.command("matt", "");
+	assert.match(h.notice(), /проверку/);
+	assert.match(h.status(), /phase: implement-spec/);
 });

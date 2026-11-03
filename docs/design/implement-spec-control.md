@@ -63,7 +63,7 @@ issue-номер спеки (`#42`) либо путь к `.scratch/<feature>/`. 
 interface GuardState {
   phase: string | null;
   gatesPassed: string[];
-  spec?: { ref: string; branch: string };  // M1
+  spec?: { ref: string };  // M1
 }
 ```
 
@@ -77,19 +77,15 @@ interface GuardState {
 
 ```ts
 type Gate =
-  | { kind: "user"; quote: string; question: string }
-  | { kind: "command"; quote: string; must: string }   // regexp; exit code 0
-  | { kind: "artifact"; quote: string; path: string };
+  | { kind: "user"; quote: string; question: string; source?: string }
+  | { kind: "command"; must: string; hint: string };   // regexp по выводу, isError=false
 ```
 
 `command`-гейт закрывается не ответом, а **результатом инструмента**: расширение смотрит
-`tool_result` и требует, чтобы модель сама прогнала проверку и получила код 0. Подделать нельзя —
-код приходит из раннера, а не из текста модели.
+`tool_result` от инструмента с грантом `bash`, требует `isError === false` и совпадения вывода с
+`must`. Подделать нельзя — вывод приходит из раннера, а не из текста модели.
 
-Сам запрос — frontier из `docs/agents/issue-tracker.md:41`: открытых детей у карты спеки быть не
-должно. Команда хранится рядом с якорем (`spec.check`) и по умолчанию спрашивает трекер
-(`gh issue list --state open` по sub-issues карты, либо `issue_dependencies_summary.blocked_by`).
-Спека закрыта — тикеты закрыты; кто и как их закрыл, модель не решает.
+Команду проверки модель не диктует: она выводится из якоря (`#42` → `gh issue view 42 --json state -q .state`) и показывается в тексте блокировки. Поэтому `must` терпит оба натуральных ответа трекера: строку `0` (открытых под-тикетов нет) и `CLOSED`.
 
 ### M3. Продолжение на границе
 
@@ -165,6 +161,11 @@ return {
   инструмента, а продолжением: уйти молча нельзя, а закончить ход с открытыми тикетами — нельзя.
 
 ## 5. Порядок и проверки
+
+Сделано: **M1** (якорь) → **M5** (диск + `/matt`) → **M2** (`command`-гейт). Дальше M4, M3, сабагенты.
+
+**Реализовано иначе, чем задумано:** вариант `artifact` не появился (ничего его не использует — YAGNI),
+а `spec.check` не поле состояния: команда выводится из якоря (`specCheck()` в `engine.ts`).
 
 1. **M1** (якорь) — `engine.ts`: поле `spec`, гейт входа; тест: `decide(at("implement-spec"), tool("write"))` без `spec` → блок, со `spec` → allow.
 2. **M4** (блок) — `index.ts`: сборка строки, хук `context`; тест на текст.
