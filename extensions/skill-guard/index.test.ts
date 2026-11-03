@@ -41,7 +41,7 @@ function harness(answer: string | undefined, permission = true, context: Record<
 		},
 	};
 	register(pi as unknown as ExtensionAPI);
-	const ctx = { ui, hasUI: true, ...context };
+	const ctx = { ui, hasUI: true, hasPendingMessages: () => false, ...context };
 	const fire = async (name: string, event: unknown) => {
 		for (const handler of handlers[name] ?? []) {
 			const result = await handler(event, ctx);
@@ -331,4 +331,40 @@ test("the tracker's count reaches the block, and no count is not a zero", async 
 	await h.fire("tool_result", { toolName: "bash", input: {}, content: [{ type: "text", text: "3\n" }], isError: false });
 	const after = (await h.fire("context", { messages: [] })) as { messages: Msg[] };
 	assert.match(after.messages[0]?.content ?? "", /3 открытых тикетов/);
+});
+
+type Boundary = { continue?: boolean; entries?: { type: string; content: string }[] };
+
+test("an unclosed command gate asks for a continuation instead of silence", async () => {
+	const h = harness("#42");
+	await h.fire("tool_call", readSkill("implement-spec"));
+	const result = (await h.fire("agent_before_settle", {})) as Boundary;
+	assert.equal(result.continue, true);
+	assert.equal(result.entries?.length, 1, "one runnable entry, or Pi refuses the continuation");
+	assert.equal(result.entries?.[0]?.type, "custom_message");
+	assert.match(result.entries?.[0]?.content ?? "", /implement-spec/);
+});
+
+test("a human gate is never talked over", async () => {
+	const h = harness("ok");
+	await h.fire("tool_call", readSkill("to-tickets"));
+	assert.equal(await h.fire("agent_before_settle", {}), undefined, "the model is waiting for an answer, not stuck");
+});
+
+test("a closed gate ends the turn, and the ceiling stops a loop", async () => {
+	const closed = harness("#42");
+	await closed.fire("tool_call", readSkill("implement-spec"));
+	await closed.fire("tool_result", { toolName: "bash", input: {}, content: [{ type: "text", text: "CLOSED" }], isError: false });
+	assert.equal(await closed.fire("agent_before_settle", {}), undefined);
+
+	const stuck = harness("#42");
+	await stuck.fire("tool_call", readSkill("implement-spec"));
+	const answers = [];
+	for (let i = 0; i < 4; i++) answers.push(await stuck.fire("agent_before_settle", {}));
+	assert.deepEqual(answers.slice(0, 3).map((r) => (r as Boundary).continue), [true, true, true]);
+	assert.equal(answers[3], undefined, "the fourth turn is allowed to end");
+
+	// A new user turn gets its own budget.
+	await stuck.fire("input", { text: "продолжай", source: "interactive" });
+	assert.equal(((await stuck.fire("agent_before_settle", {})) as Boundary).continue, true);
 });

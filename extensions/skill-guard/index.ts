@@ -28,6 +28,9 @@ export default function (pi: ExtensionAPI): void {
 	let lastClosure: { phase: string; answer: string } | null = null;
 	/** Where this session's phase is saved; null when the run has no cwd (headless, tests). */
 	let sessionFile: string | null = null;
+	/** Auto-continuations asked for in this user turn: the ceiling that keeps a loop from spinning. */
+	let continues = 0;
+	const MAX_CONTINUES = 3;
 
 	const fileFor = (ctx: unknown): string | null => {
 		const c = ctx as { cwd?: string; sessionManager?: { getSessionId?: () => string } };
@@ -100,6 +103,8 @@ export default function (pi: ExtensionAPI): void {
 	// way in has to set the phase here. The order between those skills is the user's
 	// call — they typed it — so this is not checked against successors.
 	pi.on("input", (event, ctx) => {
+		// A new user turn starts with its own budget of continuations.
+		continues = 0;
 		const m = /^\/skill:([\w-]+)/.exec(event.text.trim());
 		const name = m?.[1];
 		// A typo, or a skill outside the flow, must not look armed: only a contract makes a
@@ -259,6 +264,23 @@ export default function (pi: ExtensionAPI): void {
 				...event.messages,
 				{ role: "custom", customType: "skill-guard", content: block, display: false, timestamp: Date.now() },
 			],
+		};
+	});
+
+	// A turn that ended on an unclosed mechanical gate is not finished work: the model gets
+	// the block back instead of silence. A human gate is never talked over — there the model
+	// is waiting for an answer, not stuck — and the ceiling keeps this from looping.
+	pi.on("agent_before_settle", (_event, ctx) => {
+		if (continues >= MAX_CONTINUES) return;
+		const gate = needsGate(CONTRACTS, state);
+		if (gate?.kind !== "command") return;
+		if (ctx.hasPendingMessages()) return;
+		const block = phaseBlock(CONTRACTS, state);
+		if (!block) return;
+		continues++;
+		return {
+			continue: true,
+			entries: [{ type: "custom_message", customType: "skill-guard", content: block, display: false }],
 		};
 	});
 
