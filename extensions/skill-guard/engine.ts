@@ -97,17 +97,17 @@ export function commandCloses(gate: Gate, isError: boolean, output: string): boo
 }
 
 /**
- * Whether a shell command can prove a tracker state at all. Reading only: a composite
- * command (`gh issue list; echo 0`) or a mutation (`gh issue close 1`) prints whatever it
- * likes, so it proves nothing — the gate would close on the model's own act.
+ * Whether a shell command proves *this* spec closed. The command is not the model's to
+ * choose: a named issue is proved only by reading that issue, and the count route only by
+ * the unfiltered open list. Anything else — another issue, `--state closed`, a composite —
+ * prints a marker that says nothing about this spec.
  */
-export function trackerRead(command: string): boolean {
-	const c = command.trim();
-	if (/[;&|<>`]|\$\(|\n/.test(c)) return false;
-	// `gh api` is deliberately absent: it takes `-X PATCH … -f state=closed`, so one command
-	// would close the ticket and then print the marker the gate waits for. `gh issue view`
-	// and `gh issue list` cannot write.
-	return /^gh\s+issue\s+(view|list)\b/.test(c);
+export function trackerProof(command: string, ref: string | undefined): boolean {
+	const c = command.replace(/\s+/g, " ").trim();
+	if (!c || /[;&|<>`]|\$\(/.test(c)) return false;
+	const issue = /^#?(\d+)$/.exec((ref ?? "").trim());
+	if (issue && new RegExp(`^gh issue view ${issue[1]} --json state( -q \\.state)?$`).test(c)) return true;
+	return /^gh issue list --state open( --json number)? -q length$/.test(c);
 }
 
 /** What a gate asks for, in one line: the question for a person, the check for a command. */

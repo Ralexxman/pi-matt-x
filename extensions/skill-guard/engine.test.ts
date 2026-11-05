@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { CONTRACTS } from "./contracts.ts";
-import { commandCloses, decide, gateText, grantFor, needsGate, needsPermission, phaseBlock, skillNameFromPath, specCheck, trackerRead, type GuardState } from "./engine.ts";
+import { commandCloses, decide, gateText, grantFor, needsGate, needsPermission, phaseBlock, skillNameFromPath, specCheck, trackerProof, type GuardState } from "./engine.ts";
 
 const at = (phase: string | null, gatesPassed: string[] = []): GuardState => ({ phase, gatesPassed });
 const tool = (name: string) => ({ kind: "tool" as const, tool: name });
@@ -225,22 +225,23 @@ test("a declared successor is a phase even before it has a contract of its own",
 	assert.deepEqual(decide(at("a"), skill("research"), bare), { allow: true, phase: "a" });
 });
 
-test("only a read of the tracker can prove a tracker state", () => {
-	assert.equal(trackerRead("gh issue list --state open -q length"), true);
-	assert.equal(trackerRead("gh issue view 1 --json state -q .state"), true);
-	assert.equal(trackerRead("  gh issue list --state open --json number -q 'length'"), true, "a quoted argument is still one command");
+test("only a command that proves this spec can close the gate", () => {
+	// The spec's own issue, read the way specCheck() builds it, and the unfiltered count.
+	assert.equal(trackerProof("gh issue view 42 --json state -q .state", "#42"), true);
+	assert.equal(trackerProof("gh issue view 42 --json state", "#42"), true);
+	assert.equal(trackerProof("gh issue list --state open -q length", "#42"), true);
+	assert.equal(trackerProof("gh issue list --state open --json number -q length", "#42"), true);
 
-	// `gh api` takes `-X PATCH … -f state=closed`: one command would close the ticket and then
-	// print the marker the gate waits for. It is not a read of the tracker.
-	assert.equal(trackerRead("gh api repos/o/r/issues/1"), false);
-	assert.equal(trackerRead("gh api -X PATCH repos/o/r/issues/1 -f state=closed -q .state"), false);
-
-	// A composite prints whatever it likes; a mutation is the model's own act.
-	assert.equal(trackerRead("gh issue list --state open; echo 0"), false);
-	assert.equal(trackerRead("gh issue list --state open && echo 0"), false);
-	assert.equal(trackerRead("echo 0 | gh issue list"), false);
-	assert.equal(trackerRead("gh issue view 1 > /dev/null"), false);
-	assert.equal(trackerRead("gh issue close 1"), false);
-	assert.equal(trackerRead("gh issue edit 1 --body x"), false);
-	assert.equal(trackerRead("printf 0"), false);
+	// The object is not the model's to choose: another issue proves nothing about #42.
+	assert.equal(trackerProof("gh issue view 1 --json state -q .state", "#42"), false);
+	// Nor is a filter that prints a convenient marker.
+	assert.equal(trackerProof("gh issue list --state closed --limit 1 --json state -q .state", "#42"), false);
+	assert.equal(trackerProof("gh issue list --state closed -q length", "#42"), false);
+	// Nor a mutation, a composite or `gh api`, which can close the ticket and print the marker.
+	assert.equal(trackerProof("gh issue close 42", "#42"), false);
+	assert.equal(trackerProof("gh api -X PATCH repos/o/r/issues/42 -f state=closed -q .state", "#42"), false);
+	assert.equal(trackerProof("gh issue list --state open; echo 0", "#42"), false);
+	// A path spec has no tracker state: only the count route says anything about it.
+	assert.equal(trackerProof("gh issue view 42 --json state", "docs/spec.md"), false);
+	assert.equal(trackerProof("gh issue list --state open -q length", "docs/spec.md"), true);
 });

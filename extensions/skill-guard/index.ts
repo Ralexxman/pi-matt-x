@@ -17,7 +17,7 @@
  */
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { CONTRACTS, SUB_SKILLS } from "./contracts.ts";
-import { contractOf, decide, commandCloses, gateText, grantFor, needsGate, needsPermission, phaseBlock, skillNameFromPath, specCheck, trackerRead, type GuardState } from "./engine.ts";
+import { contractOf, decide, commandCloses, gateText, grantFor, needsGate, needsPermission, phaseBlock, skillNameFromPath, specCheck, trackerProof, type GuardState } from "./engine.ts";
 import { findRoot, readState, statePath, writeState } from "./state.ts";
 
 export default function (pi: ExtensionAPI): void {
@@ -285,10 +285,10 @@ export default function (pi: ExtensionAPI): void {
 		if (inherited) return;
 		// Only a command can prove a tracker state; an edit or a read proves nothing.
 		if (grantFor(event.toolName) !== "bash") return;
-		// And only a read of the tracker: `printf 0` proves nothing, and `gh issue close 1` or
-		// `gh issue list; echo 0` would close the gate with the model's own act.
+		// Only a command that proves *this* spec counts: another issue, a filter that prints a
+		// convenient marker, a mutation or a composite all prove nothing about this spec.
 		const command = typeof event.input?.command === "string" ? event.input.command : "";
-		if (!trackerRead(command)) return;
+		if (!trackerProof(command, state.spec?.ref)) return;
 		const output = event.content.map((part) => (part.type === "text" ? part.text : "")).join("\n");
 
 		// The tracker's last answer is the one number worth carrying past a compaction.

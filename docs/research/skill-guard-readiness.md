@@ -21,16 +21,18 @@
 
 ## 2. Сверка цитат гейтов с установленными скиллами (Drift Check)
 
-Все текстовые цитаты `quote`, зашитые в `contracts.ts`, присутствуют в файлах `SKILL.md` каталога `~/.agents/skills/` дословно и без расхождений:
+Пользовательских гейтов восемь, уникальных цитат шесть: одна цитата `grilling` служит трём контрактам. Сверку делает `contracts.test.ts` автоматически — для каждого контракта с `gate.kind === "user"` он ищет цитату в `SKILL.md` источника (`gate.source ?? name`) после схлопывания пробелов, поэтому дрейф валит тест, а не тихо меняет вопрос человеку.
 
-1. `grilling` (`contracts.ts:51-52`): цитата `"The session is done when the frontier is empty: every branch of the design tree visited, nothing left silently assumed."` точно совпадает с `~/.agents/skills/grilling/SKILL.md:30`.
-2. `grill-me` (`contracts.ts:68-69`): ссылается на `source: "grilling"`, делегирующий интервью (`grill-me/SKILL.md:7`); цитата совпадает с `~/.agents/skills/grilling/SKILL.md:30`.
-3. `grill-with-docs` (`contracts.ts:81-82`): ссылается на `source: "grilling"`; цитата совпадает с `~/.agents/skills/grilling/SKILL.md:30`.
-4. `to-spec` (`contracts.ts:93`): цитата `"Check with the user that these seams match their expectations."` точно совпадает с `~/.agents/skills/to-spec/SKILL.md:17`.
-5. `to-tickets` (`contracts.ts:103`): цитата `"Each slice is sized to fit in a single fresh context window"` точно совпадает с `~/.agents/skills/to-tickets/SKILL.md:33`.
-6. Остальные контракты (`implement`, `tdd`, `code-review`, `diagnosing-bugs`, `prototype`) пользовательских гейтов не имеют; `implement-spec` использует машинный `command`-гейт без цитаты (`contracts.ts:121-125`).
+| Контракт | Цитата (начало) | Источник |
+| :--- | :--- | :--- |
+| `grilling`, `grill-me`, `grill-with-docs` | The session is done when the frontier is empty: every branch of the design tree visited, nothing left silently assumed. | `grilling/SKILL.md` (у последних двух — через `gate.source`) |
+| `to-spec` | Check with the user that these seams match their expectations. | `to-spec/SKILL.md` |
+| `to-tickets` | Each slice is sized to fit in a single fresh context window | `to-tickets/SKILL.md` |
+| `pr` | Skip all preambles and keep prose brief. | `pr/SKILL.md` |
+| `retro` | Present these candidates to the user, in order of severity. | `retro/SKILL.md` |
+| `handoff` | Write a handoff document summarising the current conversation so a fresh agent can continue the work. | `handoff/SKILL.md` |
 
-Текстовый дрейф отсутствует: 8 пользовательских гейтов содержат 6 уникальных цитат (одна цитата `grilling` служит трём контрактам), и все они совпадают посимвольно (`contracts.test.ts:27-38`).
+`implement-spec` цитаты не несёт: у него машинный `command`-гейт. Остальные контракты (`implement`, `tdd`, `code-review`, `diagnosing-bugs`, `prototype`) пользовательских гейтов не имеют.
 
 ---
 
@@ -43,7 +45,7 @@
 | **Чтение неконтрактного скилла** | `engine.ts:133`, `index.ts:173` | Принято явно | Скилл без контракта доступен для чтения отовсюду, но не меняет текущую фазу (`decide` возвращает `phase: state.phase`). Ограничения открытой фазы сохраняются (`docs/adr/0005-ask-when-unknown.md:16-17`, `index.ts:9-12`). |
 | **Неизвестный инструмент** | `engine.ts:120-124`, `index.ts:205-224` | Принято явно | Если фаза разрешает `bash`, неизвестный инструмент пропускается без вопросов (`engine.ts:122`, `docs/adr/0005-ask-when-unknown.md:21-22`). В фазах без `bash` запрашивается `ui.confirm`, а в headless — блокируется (`index.ts:210-215`). |
 | **Субагенты `PI_SUBAGENT_CHILD`** | `parentFile()`, `session_start`, `tool_call`, `tool_result`, `/matt` в `index.ts` | **Закрыто (cf91d2b)** | При `PI_SUBAGENT_CHILD=1` и `PI_SUBAGENT_PARENT_SESSION=<id>` ребёнок читает файл родителя и не пишет своего: `commit()` не вычисляет файл, `/matt goto` и `/matt spec` отказывают, `/skill:` и чтение чужого `SKILL.md` не меняют фазу, `tool_result` не закрывает гейт родителя. Проверено тестами и живым RPC. |
-| **Самозакрытие тикетов моделью через `bash`** | `engine.ts:trackerRead`, `index.ts:tool_result` | **Закрыто (97e5885, afb8b0f)** | Гейт закрывает только одиночная read-only команда `gh issue view` или `gh issue list` без `;`, `&&`, `|`, `>` и подстановок. `gh issue close`, `gh issue edit`, `gh issue list; echo 0` и `gh api …` гейт не закрывают — проверено тестами и живой сессией. Осталось: модель может закрыть тикет любым способом, а потом честно прочитать `0`; это данные трекера, а не подлог. |
+| **Самозакрытие тикетов моделью через `bash`** | `engine.ts:trackerProof`, `index.ts:tool_result` | **Закрыто (97e5885, 50aaa4b, `trackerProof`)** | Принимается только команда, доказывающая **эту** спеку: `gh issue view <номер спеки> --json state` (номер сверяется с якорем) либо несуженный `gh issue list --state open … -q length`. Чужой тикет, `--state closed`, `--limit`, мутации, композиты и `gh api` гейт не закрывают — проверено тестами и живой сессией. Остаётся только предел «модель закрыла тикет, а потом честно прочитала 0»: это данные трекера. |
 
 ---
 
