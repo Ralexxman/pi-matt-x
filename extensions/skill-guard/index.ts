@@ -32,9 +32,11 @@ export default function (pi: ExtensionAPI): void {
 	let continues = 0;
 	const MAX_CONTINUES = 3;
 	/**
-	 * A subagent is a separate process with its own session id: its phase is the parent's,
-	 * read from the parent's file. It may use that phase's capabilities and may not move the
-	 * phase or close a gate — two processes writing one file would fight over the same state.
+	 * A subagent is a separate process with its own session id, and a phase is inherited only
+	 * when the runner names the parent in PI_SUBAGENT_PARENT_SESSION. `pi-subagents` exports only
+	 * PI_SUBAGENT_CHILD today, so in practice a child runs with no phase: the guard lives in the
+	 * parent session, and this branch is what makes inheritance work the day the id is exported.
+	 * A child never writes its own file, never moves the phase and never closes a gate.
 	 */
 	const isChild = process.env.PI_SUBAGENT_CHILD === "1";
 	const inherited = isChild ? (process.env.PI_SUBAGENT_PARENT_SESSION ?? "") : "";
