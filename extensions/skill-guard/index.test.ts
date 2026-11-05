@@ -289,22 +289,35 @@ test("a subagent does not close the parent's gate, and writes no file of its own
 	assert.equal(existsSync(join(String(context.cwd), ".pi", "skills-guard", "sessions", "child-1.json")), false, "a child writes no state file");
 });
 
-test("a subagent whose parent's phase cannot be read refuses to work", async () => {
-	// The parent id is set but no file exists: nothing to inherit, and starting cold is exactly
-	// what the guard exists to prevent.
-	const orphan = await asChild(() => harness("#42", true, project()));
-	await orphan.fire("session_start", {});
-	const blocked = (await orphan.fire("tool_call", write)) as { block?: boolean; reason?: string };
-	assert.equal(blocked.block, true);
-	assert.match(blocked.reason ?? "", /фазу родителя/);
-	await orphan.command("matt", "");
-	assert.match(orphan.notice(), /недоступна/);
+test("a subagent in a project the guard never ran in is not blocked", async () => {
+	// A parent id is set but no state file exists: this project has no guard to inherit, and
+	// blocking every tool here breaks unrelated work in a foreign repository.
+	const child = await asChild(() => harness("#42", true, project()));
+	await child.fire("session_start", {});
+	assert.equal(await child.fire("tool_call", write), undefined, "nothing to inherit, nothing to block");
+	assert.doesNotMatch(child.status(), /phase: /, "and no phase is armed");
 });
 
-test("a subagent with no parent session named refuses to work", async () => {
-	const orphan = await asChildWithoutParent(() => harness("#42", true, project()));
-	await orphan.fire("session_start", {});
-	assert.equal(((await orphan.fire("tool_call", write)) as { block?: boolean }).block, true);
+test("a subagent whose parent state exists but cannot be read stops", async () => {
+	// The guard was in play in that session: a half-written file must not turn into freedom.
+	const context = project();
+	const sessions = join(String(context.cwd), ".pi", "skills-guard", "sessions");
+	mkdirSync(sessions, { recursive: true });
+	writeFileSync(join(sessions, "session-1.json"), "{ not json");
+
+	const child = await asChild(() => harness("#42", true, context));
+	await child.fire("session_start", {});
+	const blocked = (await child.fire("tool_call", write)) as { block?: boolean; reason?: string };
+	assert.equal(blocked.block, true);
+	assert.match(blocked.reason ?? "", /фазу родителя/);
+	await child.command("matt", "");
+	assert.match(child.notice(), /недоступна/);
+});
+
+test("a subagent with no parent session named is not blocked either", async () => {
+	const child = await asChildWithoutParent(() => harness("#42", true, project()));
+	await child.fire("session_start", {});
+	assert.equal(await child.fire("tool_call", write), undefined);
 });
 
 test("a reload keeps the phase the last session ended in", async () => {

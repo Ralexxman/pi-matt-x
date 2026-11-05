@@ -16,6 +16,7 @@
  * resumed session keep it; `/matt` shows it and `/matt goto` moves it.
  */
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { existsSync } from "node:fs";
 import { CONTRACTS, SUB_SKILLS } from "./contracts.ts";
 import { contractOf, decide, commandCloses, gateText, grantFor, needsGate, needsPermission, phaseBlock, skillNameFromPath, specCheck, trackerProof, type GuardState } from "./engine.ts";
 import { findRoot, readState, statePath, writeState } from "./state.ts";
@@ -127,9 +128,11 @@ export default function (pi: ExtensionAPI): void {
 		const source = parent ?? sessionFile;
 		const saved = source ? readState(source) : null;
 		if (saved) Object.assign(state, saved);
-		// A child that cannot find the parent's phase has no rules to inherit, and starting cold
-		// is exactly what this extension exists to prevent: it refuses instead of running free.
-		orphan = isChild && !saved;
+		// A child inherits a phase that exists. A project where the guard never ran has nothing to
+		// inherit, and blocking every tool there breaks unrelated work — that is exactly what
+		// happened to a `researcher` subagent started outside this repo. A file that exists but
+		// cannot be read is different: the guard was in play, so the child stops instead.
+		orphan = isChild && !saved && parent !== null && existsSync(parent);
 		commit(ctx);
 	});
 
