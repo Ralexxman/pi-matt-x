@@ -298,6 +298,20 @@ test("a subagent in a project the guard never ran in is not blocked", async () =
 	assert.doesNotMatch(child.status(), /phase: /, "and no phase is armed");
 });
 
+test("a subagent inherits a session that simply has no phase open", async () => {
+	// What a cold session writes: the guard ran, and nothing was open. That is not a broken state,
+	// so a subagent in such a project keeps its tools.
+	const context = project();
+	const sessions = join(String(context.cwd), ".pi", "skills-guard", "sessions");
+	mkdirSync(sessions, { recursive: true });
+	writeFileSync(join(sessions, "session-1.json"), JSON.stringify({ phase: null, gatesPassed: [] }));
+
+	const child = await asChild(() => harness("#42", true, context));
+	await child.fire("session_start", {});
+	assert.equal(await child.fire("tool_call", write), undefined, "no phase to inherit, nothing to block");
+	assert.doesNotMatch(child.status(), /phase: /);
+});
+
 test("a subagent whose parent state exists but cannot be read stops", async () => {
 	// The guard was in play in that session: a half-written file must not turn into freedom.
 	const context = project();

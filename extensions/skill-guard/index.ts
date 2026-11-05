@@ -16,10 +16,9 @@
  * resumed session keep it; `/matt` shows it and `/matt goto` moves it.
  */
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { existsSync } from "node:fs";
 import { CONTRACTS, SUB_SKILLS } from "./contracts.ts";
 import { contractOf, decide, commandCloses, gateText, grantFor, needsGate, needsPermission, phaseBlock, skillNameFromPath, specCheck, trackerProof, type GuardState } from "./engine.ts";
-import { findRoot, readState, statePath, writeState } from "./state.ts";
+import { findRoot, readState, stateBroken, statePath, writeState } from "./state.ts";
 
 export default function (pi: ExtensionAPI): void {
 	const state: GuardState = { phase: null, gatesPassed: [] };
@@ -129,10 +128,11 @@ export default function (pi: ExtensionAPI): void {
 		const saved = source ? readState(source) : null;
 		if (saved) Object.assign(state, saved);
 		// A child inherits a phase that exists. A project where the guard never ran has nothing to
-		// inherit, and blocking every tool there breaks unrelated work — that is exactly what
-		// happened to a `researcher` subagent started outside this repo. A file that exists but
-		// cannot be read is different: the guard was in play, so the child stops instead.
-		orphan = isChild && !saved && parent !== null && existsSync(parent);
+		// inherit, and neither has a session whose file says `phase: null` — that is a guard with
+		// nothing open, not a broken one. Blocking either breaks unrelated work: a `researcher`
+		// subagent started outside this repo died on exactly that. Only a file that cannot be read
+		// stops the child, because then the guard was in play and its state is unknown.
+		orphan = isChild && parent !== null && stateBroken(parent);
 		commit(ctx);
 	});
 

@@ -47,6 +47,21 @@ export function readState(path: string): GuardState | null {
 	};
 }
 
+/**
+ * True when the file exists and is not a JSON object: a half-written state must not read as
+ * "no guard here". A file that parses — even `{"phase":null,"gatesPassed":[]}`, which is what
+ * a session with no phase writes — says the guard ran and had nothing to open.
+ */
+export function stateBroken(path: string): boolean {
+	if (!existsSync(path)) return false;
+	try {
+		const raw: unknown = JSON.parse(readFileSync(path, "utf8"));
+		return typeof raw !== "object" || raw === null;
+	} catch {
+		return true;
+	}
+}
+
 export function writeState(path: string, state: GuardState): void {
 	mkdirSync(dirname(path), { recursive: true });
 	const tmp = `${path}.tmp`;
