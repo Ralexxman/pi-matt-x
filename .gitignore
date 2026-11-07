@@ -3,4 +3,6 @@ node_modules/
 .pi/hindsight/
 .pi/todos/
 .pi/skills-guard/
+/.pi/goals/
+/.pi/.goals-pool-snapshot.json
 *.log

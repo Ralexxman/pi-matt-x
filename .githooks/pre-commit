@@ -1,0 +1,3 @@
+#!/bin/sh
+# The only delivery path is push → `pi update --extensions`, so a red commit lands in the live pi.
+npm run check && npm test
