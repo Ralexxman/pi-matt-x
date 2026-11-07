@@ -279,7 +279,9 @@ export default function (pi: ExtensionAPI): void {
 			}
 		}
 
-		const decision = decide(state, { kind: "tool", tool: event.toolName }, CONTRACTS);
+		// A write grant can be scoped to paths, so the path the tool names travels with the request.
+		const path = typeof input.path === "string" ? input.path : typeof input.file_path === "string" ? input.file_path : undefined;
+		const decision = decide(state, { kind: "tool", tool: event.toolName, path }, CONTRACTS);
 		if (!decision.allow) return { block: true, reason: decision.reason };
 	});
 
@@ -380,6 +382,9 @@ export default function (pi: ExtensionAPI): void {
 				state.spec = { ref: spec[1].trim() };
 				commit(ctx);
 				ctx.ui.notify(`skill-guard: спека → ${state.spec.ref}`, "info");
+				// The user typed a command, not a prompt: without this the model never learns
+				// that the phase moved and sits idle waiting for something that already happened.
+				await pi.sendUserMessage(`skill-guard: спека → ${state.spec.ref}. Продолжай.`);
 				return;
 			}
 			const goto = /^goto\s+([\w-]+)$/.exec(args.trim());
@@ -399,6 +404,11 @@ export default function (pi: ExtensionAPI): void {
 			lastClosure = null;
 			commit(ctx);
 			ctx.ui.notify(`skill-guard: фаза → ${name}`, "info");
+			// A command produces no turn of its own: the model has to be told the phase moved,
+			// or it never resumes the work this command was typed to unblock.
+			await pi.sendUserMessage(
+				`skill-guard: фаза → ${name} (разрешено: ${contractOf(CONTRACTS, name)?.grants.join(", ")}). Продолжай прерванную работу.`,
+			);
 		},
 	});
 }

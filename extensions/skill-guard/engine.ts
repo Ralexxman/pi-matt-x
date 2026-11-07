@@ -18,7 +18,8 @@ export interface GuardState {
 }
 
 export type Request =
-	| { kind: "tool"; tool: string; }
+	/** `path` is what the tool says it will touch: a scoped write grant is decided on it. */
+	| { kind: "tool"; tool: string; path?: string; }
 	| { kind: "skill"; name: string; };
 
 export type Decision =
@@ -190,6 +191,14 @@ export function decide(state: GuardState, req: Request, contracts: readonly Cont
 	if (grant === null) return { allow: true, phase: state.phase };
 	if (!c) return { allow: true, phase: state.phase };
 	if (c.grants.includes(grant)) {
+		// A documentation phase writes its own paper trail, not the repo: the failure this
+		// stops is code edited while the interview was still open. A tool that names no path
+		// cannot prove where it lands, so it is refused rather than trusted.
+		if (grant === "write" && c.writeScope && !c.writeScope.test((req.path ?? "").replace(/\\/g, "/"))) {
+			return blocked(
+				`Фаза «${c.name}» пишет только документацию (GLOSSARY.md, docs/adr/, docs/plans/), а «${req.path ?? "путь не назван"}» — нет. Код меняется в своей фазе: закрой гейт этой и перейди дальше.`,
+			);
+		}
 		// Reading is how the model finds out what the spec says; only a change needs an anchor.
 		if (c.needsSpec && grant !== "read" && !state.spec?.ref) {
 			return blocked(

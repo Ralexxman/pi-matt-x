@@ -40,6 +40,12 @@ export interface Contract {
 	 */
 	needsSpec?: boolean;
 	/**
+	 * A `write` grant is not a licence to change the repo: a documentation phase writes its
+	 * own paper trail and nothing else. Matched against the path the write tool names, with
+	 * separators normalised; a tool that names no path counts as outside it.
+	 */
+	writeScope?: RegExp;
+	/**
 	 * End condition of the phase, asked of the user before moving on. `quote` is the
 	 * skill's own wording of what "done" means, shown as evidence; `source` names the
 	 * skill whose SKILL.md holds that wording when it is not this one.
@@ -74,10 +80,11 @@ export const CONTRACTS: readonly Contract[] = [
 		},
 	},
 	{
-		// Runs the same interview as grill-me but leaves a paper trail: docs only,
-		// so all write tools are granted.
+		// Runs the same interview as grill-me but leaves a paper trail: docs only, so the
+		// write grant is scoped to that paper trail — code waits for its own phase.
 		name: "grill-with-docs",
 		grants: ["read", "write"],
+		writeScope: /(^|\/)(GLOSSARY\.md|CONTEXT\.md|docs\/(adr|plans)\/)/i,
 		// `grilling` is not a next phase but the interview this one runs: the skill
 		// says to call it. Listed first so it reads as the step it is.
 		successors: ["grilling", "to-spec", "domain-modeling", "prototype"],

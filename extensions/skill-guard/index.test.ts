@@ -20,6 +20,7 @@ function harness(answer: string | undefined, permission = true, context: Record<
 	let confirmed = 0;
 	const statuses: string[] = [];
 	const notices: string[] = [];
+	const sent: string[] = [];
 	const ui = {
 		setStatus(_key: string, text: string | undefined) {
 			statuses.push(text ?? "");
@@ -41,6 +42,10 @@ function harness(answer: string | undefined, permission = true, context: Record<
 		registerCommand: (name: string, options: { handler: (args: string, ctx: unknown) => Promise<void>; getArgumentCompletions?: (prefix: string) => { value: string; label: string }[] | null }) => {
 			commands[name] = options.handler;
 			registered[name] = options;
+		},
+		// What a command says to the model: without it `/matt` moves the phase and the run stays idle.
+		sendUserMessage: async (text: string) => {
+			sent.push(text);
 		},
 	};
 	register(pi as unknown as ExtensionAPI);
@@ -65,6 +70,7 @@ function harness(answer: string | undefined, permission = true, context: Record<
 		confirmed: () => confirmed,
 		status: () => statuses.at(-1) ?? "",
 		notice: () => notices.at(-1) ?? "",
+		sent: () => sent,
 	};
 }
 
@@ -357,6 +363,7 @@ test("/matt reports the restored phase and moves it", async () => {
 	await h.fire("tool_call", readSkill("to-tickets"));
 	await h.command("matt", "");
 	assert.match(h.notice(), /фаза: to-tickets/);
+	assert.equal(h.sent().length, 0, "a bare /matt is a look, not a prompt");
 
 	await h.command("matt", "goto research");
 	assert.match(h.notice(), /не фаза/);
@@ -364,6 +371,7 @@ test("/matt reports the restored phase and moves it", async () => {
 
 	await h.command("matt", "goto implement-spec");
 	assert.match(h.status(), /phase: implement-spec/);
+	assert.match(h.sent().at(-1) ?? "", /фаза → implement-spec/, "the move wakes the model instead of leaving it idle");
 	assert.equal(((await h.fire("tool_call", write)) as { block?: boolean }).block, true, "implement-spec needs a spec first");
 	await h.command("matt", "spec #42");
 	assert.match(h.notice(), /#42/);

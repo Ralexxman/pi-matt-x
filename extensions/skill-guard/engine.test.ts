@@ -5,6 +5,7 @@ import { commandCloses, decide, gateText, grantFor, needsGate, needsPermission, 
 
 const at = (phase: string | null, gatesPassed: string[] = []): GuardState => ({ phase, gatesPassed });
 const tool = (name: string) => ({ kind: "tool" as const, tool: name });
+const write = (path?: string) => ({ kind: "tool" as const, tool: "write", path });
 const skill = (name: string) => ({ kind: "skill" as const, name });
 
 test("cold start is unguarded", () => {
@@ -32,7 +33,7 @@ test("a sub-skill keeps the open phase and its grants", () => {
 	if (!d.allow) return;
 	assert.equal(d.phase, "grill-with-docs");
 	// the whole point: the docs the skill asks for can still be written afterwards
-	assert.equal(decide(at(d.phase), tool("write"), CONTRACTS).allow, true);
+	assert.equal(decide(at(d.phase), write("GLOSSARY.md"), CONTRACTS).allow, true);
 });
 
 test("an uncontracted sub-skill is never a phase", () => {
@@ -244,4 +245,20 @@ test("only a command that proves this spec can close the gate", () => {
 	// A path spec has no tracker state: only the count route says anything about it.
 	assert.equal(trackerProof("gh issue view 42 --json state", "docs/spec.md"), false);
 	assert.equal(trackerProof("gh issue list --state open -q length", "docs/spec.md"), true);
+});
+
+test("a documentation phase writes its paper trail, not code", () => {
+	// the failure this scopes: code edited while the interview was still open
+	const code = decide(at("grill-with-docs"), { kind: "tool", tool: "edit", path: "publisher/radar.py" }, CONTRACTS);
+	assert.equal(code.allow, false);
+	if (code.allow) return;
+	assert.match(code.reason, /grill-with-docs/);
+	assert.equal(decide(at("grill-with-docs"), write("GLOSSARY.md"), CONTRACTS).allow, true);
+	assert.equal(decide(at("grill-with-docs"), write("docs/adr/0002-seed-supply.md"), CONTRACTS).allow, true);
+	// a Windows path is matched on normalised separators
+	assert.equal(decide(at("grill-with-docs"), write("C:\\Users\\x\\proj\\docs\\adr\\0002-x.md"), CONTRACTS).allow, true);
+	// a write tool that names no path cannot prove where it lands
+	assert.equal(decide(at("grill-with-docs"), write(), CONTRACTS).allow, false);
+	// a phase that is not documentation is untouched by the scope
+	assert.equal(decide(at("implement"), { kind: "tool", tool: "edit", path: "publisher/radar.py" }, CONTRACTS).allow, true);
 });
