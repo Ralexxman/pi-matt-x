@@ -26,9 +26,10 @@ export type Decision =
 	| { allow: false; reason: string; };
 
 /**
- * Tools that only read. Taken from the live tool list of this install (pi-lean-ctx
- * extensions/index.ts, pi-lens dist, llm-wiki): a name missing here is not dangerous,
- * it just costs one permission question inside a read-only phase.
+ * Tools that only read, plus the one that only asks. Taken from the live tool list of this
+ * install (pi-lean-ctx extensions/index.ts, pi-lens dist, llm-wiki, rpiv-ask-user-question):
+ * a name missing here is not dangerous, it just costs one permission question inside a
+ * read-only phase.
  */
 const READ_ONLY_TOOLS = new Set([
 	"read", "grep", "find", "ls",
@@ -37,6 +38,10 @@ const READ_ONLY_TOOLS = new Set([
 	"symbol_search", "read_symbol", "read_enclosing", "module_report", "project_report",
 	"ast_grep_search", "ast_grep_outline", "lsp_navigation",
 	"wiki_search", "wiki_recall", "wiki_status",
+	// Not a read: a dialog. It needs no capability, and `read` is the weakest one every phase
+	// grants; an unknown tool here puts a permission dialog on top of the question it asks,
+	// and blocks it outright without a UI — the second question the design forbids.
+	"ask_user_question",
 ]);
 
 /** Every tool that runs a command, a CLI or an agent that has tools of its own. */

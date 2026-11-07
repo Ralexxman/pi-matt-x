@@ -140,7 +140,7 @@ test("a tool that writes or executes is never mapped as read", () => {
 });
 
 test("read-only tools of the installed extensions need no permission", () => {
-	for (const t of ["ctx_search", "ctx_tree", "symbol_search", "module_report", "lens_diagnostics", "wiki_search"]) {
+	for (const t of ["ctx_search", "ctx_tree", "symbol_search", "module_report", "lens_diagnostics", "wiki_search", "ask_user_question"]) {
 		assert.equal(grantFor(t), "read", t);
 		assert.equal(needsPermission(at("grilling"), t, CONTRACTS), false, t);
 	}
