@@ -201,6 +201,7 @@ export function decide(state: GuardState, req: Request, contracts: readonly Cont
 	}
 	return blocked(
 		`Фаза «${c.name}» разрешает только: ${c.grants.join(", ")}. Инструмент «${req.tool}» — нет.` +
-			`\nДальше отсюда: ${c.successors.join(", ")}.`,
+			`\nДальше отсюда: ${c.successors.join(", ")}.` +
+			`\nФазу открывает пользователь: попроси его ввести /matt goto <фаза> и дождись его ввода.`,
 	);
 }

@@ -82,7 +82,9 @@ test("reading a skill with no writes blocks write and allows read", async () => 
 	assert.equal(await h.fire("tool_call", readSkill("grilling")), undefined);
 	assert.deepEqual((await h.fire("tool_call", write)) as object, {
 		block: true,
-		reason: "Фаза «grilling» разрешает только: read. Инструмент «write» — нет.\nДальше отсюда: grill-me, grill-with-docs, domain-modeling.",
+		reason:
+			"Фаза «grilling» разрешает только: read. Инструмент «write» — нет.\nДальше отсюда: grill-me, grill-with-docs, domain-modeling." +
+			"\nФазу открывает пользователь: попроси его ввести /matt goto <фаза> и дождись его ввода.",
 	});
 	assert.equal(await h.fire("tool_call", { toolName: "read", input: { path: "src/a.ts" } }), undefined);
 });
