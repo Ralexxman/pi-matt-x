@@ -28,7 +28,10 @@ export default function (pi: ExtensionAPI): void {
 	const allowed = new Set<string>();
 	/** The last answer that closed a phase: history for the next one, never the current one's own. */
 	let lastClosure: { phase: string; answer: string } | null = null;
-	/** The phase a subagent was started in, so the block stops asking for one it already got. */
+	/**
+	 * The phase a subagent was started in, so the block stops asking for one it already got.
+	 * shortcut: in memory only, so a /reload asks again — a reminder, not a rule.
+	 */
 	let delegatedIn: string | null = null;
 	/** Where this session's phase is saved; null when the run has no cwd (headless, tests). */
 	let sessionFile: string | null = null;
