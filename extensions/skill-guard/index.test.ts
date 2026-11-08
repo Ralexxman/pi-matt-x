@@ -497,6 +497,19 @@ test("every request carries the phase block, exactly once", async () => {
 	assert.equal(second.messages[0]?.content, first.messages[1]?.content);
 });
 
+test("a subagent call spends the reminder the block carries", async () => {
+	const h = harness("#42");
+	await h.fire("tool_call", readSkill("implement-spec"));
+	const block = async () => {
+		const event = (await h.fire("context", { messages: [] })) as { messages: { content: string }[] };
+		return event.messages[0]?.content ?? "";
+	};
+	assert.match(await block(), /пока ни одного, работаешь один/, "the phase asks for its subagents");
+	// Delegation is not a gate: the call goes through and only the tail of the block changes.
+	assert.equal(await h.fire("tool_call", { toolName: "subagent", input: {} }), undefined);
+	assert.doesNotMatch(await block(), /пока ни одного/);
+});
+
 test("the tracker's count reaches the block, and no count is not a zero", async () => {
 	const h = harness("#42");
 	await h.fire("tool_call", readSkill("implement-spec"));

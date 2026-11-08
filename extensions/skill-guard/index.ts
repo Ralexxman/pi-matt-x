@@ -28,6 +28,8 @@ export default function (pi: ExtensionAPI): void {
 	const allowed = new Set<string>();
 	/** The last answer that closed a phase: history for the next one, never the current one's own. */
 	let lastClosure: { phase: string; answer: string } | null = null;
+	/** The phase a subagent was started in, so the block stops asking for one it already got. */
+	let delegatedIn: string | null = null;
 	/** Where this session's phase is saved; null when the run has no cwd (headless, tests). */
 	let sessionFile: string | null = null;
 	/** Auto-continuations asked for in this user turn: the ceiling that keeps a loop from spinning. */
@@ -195,6 +197,9 @@ export default function (pi: ExtensionAPI): void {
 			};
 		}
 
+		// Delegation is a fact about the turn, not a gate: it only silences the reminder.
+		if (event.toolName === "subagent" || event.toolName === "workflow") delegatedIn = state.phase;
+
 		// Entering a phase: the model reads that phase's SKILL.md. A `/skill:<name>` mention
 		// is not a path and is handled in the `input` handler above.
 		if (event.toolName === "read" && typeof input.path === "string") {
@@ -348,7 +353,7 @@ export default function (pi: ExtensionAPI): void {
 	// setStatus is invisible to the model, and a message written once is swallowed by the next
 	// compaction: the block is rebuilt on every request, at the tail of the conversation.
 	pi.on("context", (event) => {
-		const block = phaseBlock(CONTRACTS, state);
+		const block = phaseBlock(CONTRACTS, state, delegatedIn === state.phase);
 		if (!block) return;
 		return {
 			messages: [
@@ -369,7 +374,7 @@ export default function (pi: ExtensionAPI): void {
 		// cannot name its own spec: continuing would replay the same refusal turn after turn.
 		if (contractOf(CONTRACTS, state.phase)?.needsSpec && !state.spec?.ref) return;
 		if (ctx.hasPendingMessages()) return;
-		const block = phaseBlock(CONTRACTS, state);
+		const block = phaseBlock(CONTRACTS, state, delegatedIn === state.phase);
 		if (!block) return;
 		continues++;
 		return {

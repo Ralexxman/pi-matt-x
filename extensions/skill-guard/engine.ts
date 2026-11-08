@@ -142,7 +142,7 @@ const BEFORE_CODE: ReadonlySet<string> = new Set(["grilling", "grill-me", "grill
  * and the next step. Built fresh on every request, because a message written once lands
  * behind the compaction point and is gone.
  */
-export function phaseBlock(contracts: readonly Contract[], state: GuardState): string | null {
+export function phaseBlock(contracts: readonly Contract[], state: GuardState, delegated = false): string | null {
 	const c = contractOf(contracts, state.phase);
 	if (!c) return null;
 	const gate = needsGate(contracts, state);
@@ -156,6 +156,9 @@ export function phaseBlock(contracts: readonly Contract[], state: GuardState): s
 		`осталось: ${left}`,
 		closing,
 		`следующий шаг: ${c.successors.join(" | ") || "—"}`,
+		// The skill asks for a fan-out, the model quietly does the work itself: one line that
+		// says so costs nothing and survives the compaction that took the steps away.
+		...(c.delegates ? [`работа: ${c.delegates}${delegated ? "" : " — пока ни одного, работаешь один"}`] : []),
 		...(BEFORE_CODE.has(c.name)
 			? ["до кода: to-spec → to-tickets → implement — из этой фазы реализация не начинается, следующую открывает пользователь"]
 			: []),

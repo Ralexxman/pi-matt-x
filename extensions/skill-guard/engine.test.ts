@@ -229,6 +229,17 @@ test("the block sends an interview to the spec, not to code", () => {
 	}
 });
 
+test("the block names the work the skill hands to subagents, until one ran", () => {
+	const spec: GuardState = { phase: "implement-spec", gatesPassed: [], spec: { ref: "#12" } };
+	assert.match(phaseBlock(CONTRACTS, spec) ?? "", /implementer-сабагенты.*пока ни одного, работаешь один/);
+	// Once a subagent ran in this phase the tail is spent, and the line states only the work.
+	const done = phaseBlock(CONTRACTS, spec, true) ?? "";
+	assert.match(done, /implementer-сабагенты/);
+	assert.doesNotMatch(done, /пока ни одного/);
+	// A phase whose skill is done inline by design says nothing about it.
+	assert.doesNotMatch(phaseBlock(CONTRACTS, at("to-tickets")) ?? "", /работа:/);
+});
+
 test("a declared successor becomes the open phase", () => {
 	// Declared in `successors` and contracted now: the last steps of the flow are real phases.
 	assert.deepEqual(decide(at("implement-spec"), skill("pr"), CONTRACTS), { allow: true, phase: "pr" });

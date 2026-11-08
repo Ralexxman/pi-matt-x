@@ -51,6 +51,11 @@ export interface Contract {
 	 * skill whose SKILL.md holds that wording when it is not this one.
 	 */
 	gate?: Gate;
+	/**
+	 * The phase's own steps hand the work to subagents, so doing it inline is the shortcut.
+	 * Named in the block and nothing more: a one-ticket spec is legitimately done alone.
+	 */
+	delegates?: string;
 }
 
 /**
@@ -135,6 +140,8 @@ export const CONTRACTS: readonly Contract[] = [
 		grants: ["read", "write", "bash"],
 		// Nine steps against one spec: without the spec there is nothing to close.
 		needsSpec: true,
+		// The skill's own steps are one implementer subagent per ticket, each in its own worktree.
+		delegates: "implementer-сабагенты по тикетам, свой worktree на тикет",
 		successors: ["tdd", "code-review", "diagnosing-bugs", "retro", "pr", "handoff"],
 		// The one gate a model cannot talk its way through: no open children under the spec
 		// map, as the tracker reports them. `gh issue list --state open` prints 0 when done,
