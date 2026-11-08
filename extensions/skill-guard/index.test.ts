@@ -5,7 +5,7 @@
  */
 import test from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
@@ -542,6 +542,25 @@ test("/matt goto refuses a phase that has nothing to work on", async () => {
 	assert.match(h.status(), /phase: to-tickets/, "the move is refused, not half-done");
 	assert.match(h.notice(), /\/matt spec/);
 	assert.equal(h.sent().length, 0, "a refused move says nothing to the model");
+});
+
+test("/matt goto takes the plan the flow just wrote when no spec is named", async () => {
+	const context = project();
+	const plans = join(String(context.cwd), "docs", "plans");
+	mkdirSync(plans, { recursive: true });
+	writeFileSync(join(plans, "2026-01-01-old.md"), "# old");
+	writeFileSync(join(plans, "2026-11-07-new.md"), "# new");
+	utimesSync(join(plans, "2026-01-01-old.md"), new Date(2026, 0, 1), new Date(2026, 0, 1));
+	utimesSync(join(plans, "2026-11-07-new.md"), new Date(2026, 10, 7), new Date(2026, 10, 7));
+
+	const h = harness("ok", true, context);
+	await h.fire("session_start", {});
+	await h.command("matt", "goto implement-spec");
+	assert.match(h.status(), /phase: implement-spec/);
+	assert.equal(h.asked(), 0, "the newest plan is the spec, nobody is asked");
+	const saved = readFileSync(join(String(context.cwd), ".pi", "skills-guard", "sessions", "session-1.json"), "utf8");
+	assert.match(saved, /2026-11-07-new\.md/, "the plan the last session wrote is the one taken");
+	assert.equal(await h.fire("tool_call", write), undefined, "and the phase can work right away");
 });
 
 test("a human gate is never talked over", async () => {

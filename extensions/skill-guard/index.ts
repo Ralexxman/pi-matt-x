@@ -16,6 +16,8 @@
  * resumed session keep it; `/matt` shows it and `/matt goto` moves it.
  */
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { readdirSync, statSync } from "node:fs";
+import { join } from "node:path";
 import { CONTRACTS, SUB_SKILLS } from "./contracts.ts";
 import { contractOf, decide, commandCloses, gateText, grantFor, needsGate, needsPermission, phaseBlock, skillNameFromPath, specCheck, trackerProof, type GuardState } from "./engine.ts";
 import { findRoot, readState, stateBroken, statePath, writeState } from "./state.ts";
@@ -48,6 +50,27 @@ export default function (pi: ExtensionAPI): void {
 		const id = c.sessionManager?.getSessionId?.();
 		const root = c.cwd ? findRoot(c.cwd) : null;
 		return id && root ? statePath(root, id) : null;
+	};
+
+	/**
+	 * The spec a run is about when the user named none: the plan the flow just wrote. The newest
+	 * file wins — that is the one the run is implementing. Nothing written yet means nothing to take.
+	 */
+	const newestSpec = (ctx: unknown): string | undefined => {
+		const cwd = (ctx as { cwd?: string }).cwd;
+		if (!cwd) return undefined;
+		const dir = join(cwd, "docs", "plans");
+		try {
+			let newest: { path: string; at: number } | undefined;
+			for (const entry of readdirSync(dir, { withFileTypes: true })) {
+				if (!entry.isFile() || !entry.name.endsWith(".md")) continue;
+				const at = statSync(join(dir, entry.name)).mtimeMs;
+				if (!newest || at > newest.at) newest = { path: `docs/plans/${entry.name}`, at };
+			}
+			return newest?.path;
+		} catch {
+			return undefined;
+		}
 	};
 
 	// A failed write costs the next reload's restoration, not the running session.
@@ -227,7 +250,11 @@ export default function (pi: ExtensionAPI): void {
 			// user knows which spec this run is about — asked once, at the move.
 			const entering = contractOf(CONTRACTS, decision.phase);
 			if (entering?.needsSpec && !state.spec?.ref) {
-				if (!ctx.hasUI) {
+				const written = newestSpec(ctx);
+				if (written) {
+					state.spec = { ref: written };
+					ctx.ui.notify(`skill-guard: спека → ${written} (последний план)`, "info");
+				} else if (!ctx.hasUI) {
 					ctx.ui.notify(`skill-guard: фаза «${entering.name}» без спеки — /matt spec <#issue|путь>`, "warning");
 				} else {
 					const ref = await ctx.ui.editor("На какую спеку работаем? #issue или путь", "");
@@ -408,17 +435,22 @@ export default function (pi: ExtensionAPI): void {
 				return;
 			}
 			// Only a contract makes a phase: `research` or a typo would arm nothing.
-			if (!contractOf(CONTRACTS, name)) {
+			const contract = contractOf(CONTRACTS, name);
+			if (!contract) {
 				ctx.ui.notify(`/matt goto: «${name}» — не фаза (нет контракта)`, "warning");
 				return;
 			}
-			// A phase that works on a spec is a dead end without one: `/matt goto` would arm a
-			// phase whose every tool is refused, and only the user knows which spec this run is
-			// about. The move is refused instead of bricking the session.
-			const contract = contractOf(CONTRACTS, name);
-			if (contract?.needsSpec && !state.spec?.ref) {
-				ctx.ui.notify(`/matt goto: «${name}» работает по спеке — сначала /matt spec <#issue|путь>`, "warning");
-				return;
+			// A phase that works on a spec is a dead end without one: every tool it grants is
+			// refused. Without a named spec the plan the flow just wrote is the one meant; a run
+			// that wrote none is refused instead of bricked.
+			if (contract.needsSpec && !state.spec?.ref) {
+				const written = newestSpec(ctx);
+				if (!written) {
+					ctx.ui.notify(`/matt goto: «${name}» работает по спеке — сначала /matt spec <#issue|путь>`, "warning");
+					return;
+				}
+				state.spec = { ref: written };
+				ctx.ui.notify(`skill-guard: спека → ${written} (последний план)`, "info");
 			}
 			state.phase = name;
 			state.gatesPassed = [];
