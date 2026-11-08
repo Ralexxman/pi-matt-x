@@ -13,14 +13,19 @@ test("cold start is unguarded", () => {
 	assert.equal(decide(at(null), skill("to-tickets"), CONTRACTS).allow, true);
 });
 
-test("grilling grants nothing that touches the repo", () => {
+test("grilling writes its paper trail and nothing else", () => {
+	// The interview records its own answers without waiting for a phase move.
+	assert.equal(decide(at("grilling"), write("GLOSSARY.md"), CONTRACTS).allow, true);
+	assert.equal(decide(at("grilling"), write("docs/adr/0007-queue.md"), CONTRACTS).allow, true);
+	// Code waits for its own phase, and a write that names no path cannot prove where it lands.
+	assert.equal(decide(at("grilling"), write("src/publisher/radar.py"), CONTRACTS).allow, false);
 	assert.equal(decide(at("grilling"), tool("write"), CONTRACTS).allow, false);
 	assert.equal(decide(at("grilling"), tool("bash"), CONTRACTS).allow, false);
 	assert.equal(decide(at("grilling"), tool("read"), CONTRACTS).allow, true);
 });
 
 test("the block message names the phase and its next steps", () => {
-	const d = decide(at("grilling"), tool("write"), CONTRACTS);
+	const d = decide(at("grilling"), tool("bash"), CONTRACTS);
 	assert.equal(d.allow, false);
 	if (d.allow) return;
 	assert.match(d.reason, /grilling/);

@@ -83,15 +83,17 @@ test("cold start lets any tool through", async () => {
 	assert.equal(await h.fire("tool_call", write), undefined);
 });
 
-test("reading a skill with no writes blocks write and allows read", async () => {
+test("reading a skill moves to its phase, and code waits for a phase that writes it", async () => {
 	const h = harness("ok");
 	assert.equal(await h.fire("tool_call", readSkill("grilling")), undefined);
 	assert.deepEqual((await h.fire("tool_call", write)) as object, {
 		block: true,
 		reason:
-			"Фаза «grilling» разрешает только: read. Инструмент «write» — нет.\nДальше отсюда: grill-me, grill-with-docs, domain-modeling." +
-			"\nФазу открывает пользователь: попроси его ввести /matt goto <фаза> и дождись его ввода.",
+			"Фаза «grilling» пишет только документацию (GLOSSARY.md, docs/adr/, docs/plans/), а «a.ts» — нет." +
+			" Код меняется в своей фазе: закрой гейт этой и перейди дальше.",
 	});
+	// The interview's own paper trail needs no phase move and no command.
+	assert.equal(await h.fire("tool_call", { toolName: "write", input: { path: "GLOSSARY.md", content: "x" } }), undefined);
 	assert.equal(await h.fire("tool_call", { toolName: "read", input: { path: "src/a.ts" } }), undefined);
 });
 

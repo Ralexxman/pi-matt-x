@@ -53,11 +53,20 @@ export interface Contract {
 	gate?: Gate;
 }
 
+/**
+ * The paper trail an interview leaves: the only paths a `write` grant covers outside the
+ * code phases. Shared by every phase that runs the interview.
+ */
+const DOC_SCOPE = /(^|\/)(GLOSSARY\.md|CONTEXT\.md|docs\/(adr|plans)\/)/i;
+
 export const CONTRACTS: readonly Contract[] = [
 	{
 		name: "grilling",
-		// Reads code to answer its own questions; writes nothing.
-		grants: ["read"],
+		// Reads code to answer its own questions. The paper trail is the interview's own output
+		// (the domain-modeling step it runs), so writing it does not need a phase move; code
+		// waits for its own phase.
+		grants: ["read", "write"],
+		writeScope: DOC_SCOPE,
 		successors: ["grill-me", "grill-with-docs", "domain-modeling"],
 		gate: {
 			kind: "user",
@@ -84,7 +93,7 @@ export const CONTRACTS: readonly Contract[] = [
 		// write grant is scoped to that paper trail — code waits for its own phase.
 		name: "grill-with-docs",
 		grants: ["read", "write"],
-		writeScope: /(^|\/)(GLOSSARY\.md|CONTEXT\.md|docs\/(adr|plans)\/)/i,
+		writeScope: DOC_SCOPE,
 		// `grilling` is not a next phase but the interview this one runs: the skill
 		// says to call it. Listed first so it reads as the step it is.
 		successors: ["grilling", "to-spec", "domain-modeling", "prototype"],
