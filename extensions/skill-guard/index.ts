@@ -337,6 +337,9 @@ export default function (pi: ExtensionAPI): void {
 		if (continues >= MAX_CONTINUES) return;
 		const gate = needsGate(CONTRACTS, state);
 		if (gate?.kind !== "command") return;
+		// A phase that works on a spec cannot run the command that would close its gate, and it
+		// cannot name its own spec: continuing would replay the same refusal turn after turn.
+		if (contractOf(CONTRACTS, state.phase)?.needsSpec && !state.spec?.ref) return;
 		if (ctx.hasPendingMessages()) return;
 		const block = phaseBlock(CONTRACTS, state);
 		if (!block) return;
@@ -409,6 +412,14 @@ export default function (pi: ExtensionAPI): void {
 				ctx.ui.notify(`/matt goto: «${name}» — не фаза (нет контракта)`, "warning");
 				return;
 			}
+			// A phase that works on a spec is a dead end without one: `/matt goto` would arm a
+			// phase whose every tool is refused, and only the user knows which spec this run is
+			// about. The move is refused instead of bricking the session.
+			const contract = contractOf(CONTRACTS, name);
+			if (contract?.needsSpec && !state.spec?.ref) {
+				ctx.ui.notify(`/matt goto: «${name}» работает по спеке — сначала /matt spec <#issue|путь>`, "warning");
+				return;
+			}
 			state.phase = name;
 			state.gatesPassed = [];
 			allowed.clear();
@@ -418,7 +429,7 @@ export default function (pi: ExtensionAPI): void {
 			// A command produces no turn of its own: the model has to be told the phase moved,
 			// or it never resumes the work this command was typed to unblock.
 			await pi.sendUserMessage(
-				`skill-guard: фаза → ${name} (разрешено: ${contractOf(CONTRACTS, name)?.grants.join(", ")}). Продолжай прерванную работу.`,
+				`skill-guard: фаза → ${name} (разрешено: ${contract?.grants.join(", ")}). Продолжай прерванную работу.`,
 			);
 		},
 	});

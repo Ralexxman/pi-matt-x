@@ -372,11 +372,15 @@ test("/matt reports the restored phase and moves it", async () => {
 	assert.match(h.status(), /phase: to-tickets/, "a skill without a contract arms nothing");
 
 	await h.command("matt", "goto implement-spec");
-	assert.match(h.status(), /phase: implement-spec/);
-	assert.match(h.sent().at(-1) ?? "", /фаза → implement-spec/, "the move wakes the model instead of leaving it idle");
-	assert.equal(((await h.fire("tool_call", write)) as { block?: boolean }).block, true, "implement-spec needs a spec first");
+	assert.match(h.status(), /phase: to-tickets/, "a phase with no spec is refused, not half-armed");
+	assert.match(h.notice(), /\/matt spec/);
+	assert.equal(h.sent().length, 0, "a refused move says nothing to the model");
+
 	await h.command("matt", "spec #42");
 	assert.match(h.notice(), /#42/);
+	await h.command("matt", "goto implement-spec");
+	assert.match(h.status(), /phase: implement-spec/);
+	assert.match(h.sent().at(-1) ?? "", /фаза → implement-spec/, "the move wakes the model instead of leaving it idle");
 	assert.equal(await h.fire("tool_call", write), undefined, "the phase it moved to grants writes");
 });
 
@@ -515,6 +519,29 @@ test("an unclosed command gate asks for a continuation instead of silence", asyn
 	assert.equal(result.entries?.length, 1, "one runnable entry, or Pi refuses the continuation");
 	assert.equal(result.entries?.[0]?.type, "custom_message");
 	assert.match(result.entries?.[0]?.content ?? "", /implement-spec/);
+});
+
+test("a phase with no spec is not continued into the same refusal", async () => {
+	// The state a `/matt goto implement-spec` used to leave behind: the phase is open, the
+	// spec is not, so every tool it grants is refused — including the one that closes the gate.
+	const context = project();
+	const sessions = join(String(context.cwd), ".pi", "skills-guard", "sessions");
+	mkdirSync(sessions, { recursive: true });
+	writeFileSync(join(sessions, "session-1.json"), JSON.stringify({ phase: "implement-spec", gatesPassed: [] }));
+
+	const h = harness("ok", true, context);
+	await h.fire("session_start", {});
+	assert.match(h.status(), /phase: implement-spec/);
+	assert.equal(await h.fire("agent_before_settle", {}), undefined, "nothing a continuation could change");
+});
+
+test("/matt goto refuses a phase that has nothing to work on", async () => {
+	const h = harness("ok");
+	await h.fire("tool_call", readSkill("to-tickets"));
+	await h.command("matt", "goto implement-spec");
+	assert.match(h.status(), /phase: to-tickets/, "the move is refused, not half-done");
+	assert.match(h.notice(), /\/matt spec/);
+	assert.equal(h.sent().length, 0, "a refused move says nothing to the model");
 });
 
 test("a human gate is never talked over", async () => {
