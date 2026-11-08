@@ -210,6 +210,20 @@ test("the phase block says what has to survive a compaction", () => {
 	assert.match(closed, /осталось: неизвестно/);
 });
 
+test("the block sends an interview to the spec, not to code", () => {
+	// The failure this stops: after an interview the model offered «начинаем реализацию» as the
+	// next step, because a flat successor list reads as permission.
+	for (const phase of ["grilling", "grill-with-docs", "to-spec"]) {
+		const block = phaseBlock(CONTRACTS, at(phase)) ?? "";
+		assert.match(block, /to-spec → to-tickets → implement/, phase);
+		assert.match(block, /реализация не начинается/, phase);
+	}
+	// On the road itself the reminder is gone.
+	for (const phase of ["implement", "tdd", "code-review", "pr"]) {
+		assert.doesNotMatch(phaseBlock(CONTRACTS, at(phase)) ?? "", /реализация не начинается/, phase);
+	}
+});
+
 test("a declared successor becomes the open phase", () => {
 	// Declared in `successors` and contracted now: the last steps of the flow are real phases.
 	assert.deepEqual(decide(at("implement-spec"), skill("pr"), CONTRACTS), { allow: true, phase: "pr" });

@@ -10,7 +10,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import register from "./index.ts";
-import { CONTRACTS } from "./contracts.ts";
+import { CONTRACTS, SUB_SKILLS } from "./contracts.ts";
 
 function harness(answer: string | undefined, permission = true, context: Record<string, unknown> = {}) {
 	const handlers: Record<string, ((event: unknown, ctx: unknown) => unknown)[]> = {};
@@ -460,7 +460,19 @@ test("/matt completes its own arguments", async () => {
 	assert.deepEqual(h.completions("goto impl")?.map((i) => i.value), ["goto implement", "goto implement-spec"]);
 	const full = h.completions("goto implement");
 	assert.equal(full?.length, 2, "implement is a prefix of implement-spec, both stay offerable");
-	assert.deepEqual(h.completions("goto ")?.length, CONTRACTS.length, "every phase is offerable");
+	assert.deepEqual(h.completions("goto ")?.length, CONTRACTS.length + SUB_SKILLS.size, "every phase and every sub-skill is offerable");
+	// A sub-skill the flow names as a next step must be offerable — and it is no phase.
+	assert.deepEqual(h.completions("goto domain")?.map((i) => i.value), ["goto domain-modeling"]);
+});
+
+test("/matt goto on a sub-skill keeps the phase and says so", async () => {
+	const h = harness("#42");
+	await h.fire("session_start", {});
+	await h.fire("tool_call", readSkill("grilling"));
+	await h.command("matt", "goto domain-modeling");
+	assert.match(h.status(), /phase: grilling/, "a sub-skill is not a phase: the guard stays armed");
+	assert.match(h.notice(), /под-скилл/);
+	assert.match(h.sent().at(-1) ?? "", /domain-modeling/);
 });
 
 test("every request carries the phase block, exactly once", async () => {

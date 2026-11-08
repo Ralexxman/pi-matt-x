@@ -131,6 +131,13 @@ export function specCheck(ref: string): string | undefined {
 }
 
 /**
+ * The phases that come before code. In them the model read «следующий шаг» as permission to
+ * offer «начинаем реализацию» straight after the interview — twice in one project. The road
+ * to code is a constant of the flow, so it is spelled out instead of inferred.
+ */
+const BEFORE_CODE: ReadonlySet<string> = new Set(["grilling", "grill-me", "grill-with-docs", "to-spec", "to-tickets"]);
+
+/**
  * What the model has to still see after a compaction: the phase, its spec, how much is left
  * and the next step. Built fresh on every request, because a message written once lands
  * behind the compaction point and is gone.
@@ -149,6 +156,9 @@ export function phaseBlock(contracts: readonly Contract[], state: GuardState): s
 		`осталось: ${left}`,
 		closing,
 		`следующий шаг: ${c.successors.join(" | ") || "—"}`,
+		...(BEFORE_CODE.has(c.name)
+			? ["до кода: to-spec → to-tickets → implement — из этой фазы реализация не начинается, следующую открывает пользователь"]
+			: []),
 	].join("\n");
 }
 

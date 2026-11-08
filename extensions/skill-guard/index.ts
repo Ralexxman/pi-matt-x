@@ -355,11 +355,13 @@ export default function (pi: ExtensionAPI): void {
 		getArgumentCompletions: (prefix: string) => {
 			const goto = /^(goto\s+)([\w-]*)$/.exec(prefix);
 			if (goto) {
-				return CONTRACTS.filter((c) => c.name.startsWith(goto[2] ?? "")).map((c) => ({
-					value: `${goto[1]}${c.name}`,
-					label: c.name,
-					description: `допускает: ${c.grants.join(", ")}`,
-				}));
+				// A sub-skill is offered too: the flow names it as a next step («дальше: … domain-modeling»),
+				// and an offer that the handler then refuses is worse than no offer.
+				const phases = CONTRACTS.map((c) => ({ name: c.name, description: `допускает: ${c.grants.join(", ")}` }));
+				const subSkills = [...SUB_SKILLS].map((name) => ({ name, description: "под-скилл: фаза не меняется" }));
+				return [...phases, ...subSkills]
+					.filter((c) => c.name.startsWith(goto[2] ?? ""))
+					.map((c) => ({ value: `${goto[1]}${c.name}`, label: c.name, description: c.description }));
 			}
 			return ["goto ", "spec "]
 				.filter((word) => word.startsWith(prefix))
@@ -393,6 +395,15 @@ export default function (pi: ExtensionAPI): void {
 				return;
 			}
 			const name = goto[1];
+			// A sub-skill runs inside the open phase: it is no phase of its own, and setting it as
+			// one would leave the guard with no contract — every tool allowed. The model is told to
+			// work inside the phase instead.
+			if (SUB_SKILLS.has(name)) {
+				const open = state.phase ?? "не открыта";
+				ctx.ui.notify(`skill-guard: «${name}» — под-скилл, фаза «${open}» остаётся`, "info");
+				await pi.sendUserMessage(`skill-guard: под-скилл «${name}» — фаза «${open}» остаётся: прочитай его SKILL.md и работай внутри неё.`);
+				return;
+			}
 			// Only a contract makes a phase: `research` or a typo would arm nothing.
 			if (!contractOf(CONTRACTS, name)) {
 				ctx.ui.notify(`/matt goto: «${name}» — не фаза (нет контракта)`, "warning");
